@@ -1,0 +1,5 @@
+CREATE TABLE filmorder
+
+film_id
+title
+rental_rate
