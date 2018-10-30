@@ -5,16 +5,18 @@ from pymemcache.client.hash import HashClient
 import socket
 
 PORT = 24000
+
+# Don't forget to run 'memcached' before running this next line:
 memc = base.Client(('127.0.0.1',11211));
 '''
-memc = HashClient([
+memc = HashClient(
     ('localhost', 11211),
     ('localhost', 11212)
 ])
 '''
 conn = _mysql.connect (host = "localhost",
-                        user = "tenzin",
-                        passwd = "tenzin",
+                        user = "root",
+                        passwd = "password",
                         db = "cs632")
 
 s = socket.socket()
@@ -35,9 +37,6 @@ while True:
         conn.query(qu)
         rows = conn.store_result()
         rows = rows.fetch_row(how=1,maxrows=0)
-        #for x in ro
-        #print(rows)
-        #assert False
         memc.set(req,rows,60)
         c.send((rows[0]['rental_rate']).encode('UTF-8'))
         print("Updated memcached with MySQL data")
