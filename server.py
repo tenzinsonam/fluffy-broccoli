@@ -7,7 +7,9 @@ from pymemcache.client import base
 from pymemcache.client.hash import HashClient
 import socket
 
-PORT = 24001
+debug = True
+
+PORT = 24002
 TTL = 600
 
 def setMessage(inp):
@@ -25,6 +27,13 @@ def getMessage(s):
         return ""
     return s.recv(int(rawn)).decode('UTF-8')
 
+def createDatabaseConn():
+    conn = _mysql.connect (host = "localhost",
+                            user = "user",
+                            passwd = "password",
+                            db = "cs632")
+    return conn
+
 # Don't forget to run 'memcached' before running this next line:
 memc = base.Client(('127.0.0.1',11211));
 '''
@@ -33,10 +42,14 @@ memc = HashClient(
     ('localhost', 11212)
 ])
 '''
+
+
+'''
 conn = _mysql.connect (host = "localhost",
-                        user = "tenzin",
-                        passwd = "tenzin",
+                        user = "user",
+                        passwd = "password",
                         db = "cs632")
+'''
 
 s = socket.socket()
 s.bind(('', PORT))
@@ -49,6 +62,7 @@ while True:
     if not os.fork():
         s.close()
         try:
+            conn = createDatabaseConn()
             req = getMessage(c)
             print(req)
             req = json.loads(req)
@@ -59,13 +73,14 @@ while True:
                 if not popularfilms:
                     print(req)
                     qu = "SELECT userhash FROM status WHERE userhash='" + req_value +"'"
-
                     conn.query(qu)
                     rows = conn.store_result()
                     rows = rows.fetch_row(how=1,maxrows=0)
                     print(rows)
                     if(len(rows)!=0):
-                        c.sendall(setMessage(json.dumps({'code':0,'response':'User Already Exists\n'})).encode('UTF-8'))
+                        c.sendall(setMessage(json.dumps({'code':0,'response':'User Exists\n'})).encode('UTF-8'))
+                    elif 'createUserIfNotExists' in req.keys() and req['createUserIfNotExists'] == False:
+                        c.sendall(setMessage(json.dumps({'code':1,'response':'User doesn\'t Exists\n'})).encode('UTF-8'))
                     else:
                         memc.set(req_value,'0',TTL)
                         qu = "INSERT INTO status (userhash,message) VALUES ('" + req_value +"','0')"
@@ -74,90 +89,96 @@ while True:
                    #print("Updated memcached with MySQL data")
                 else:
                     print("Loaded data from memcached")
-                    c.sendall(setMessage(json.dumps({'code':0,'response':'User Already Exists\n'})).encode('UTF-8'))
+                    c.sendall(setMessage(json.dumps({'code':0,'response':'User Exists\n'})).encode('UTF-8'))
                 #dont change req
-                reqnxt = getMessage(c)
-                print(reqnxt)
-                reqnxt = json.loads(reqnxt)
-                if reqnxt['query']=='searchUser':
-                    req_value = reqnxt['name'] + "#0"
-                    popularfilms = memc.get(req_value)
-                    if not popularfilms:
-                        print("query from db")
-                        qu = "SELECT message FROM status WHERE userhash='" + req_value +"'"
-                        conn.query(qu)
-                        rows = conn.store_result()
-                        rows = rows.fetch_row(how=1,maxrows=0)
-                        memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
-                        #memc.set(req_value,'0',TTL)
-                    else:
-                        print("query from memc")
-                    #req_value = req['value'] + "#0"
-                    tweets = int((memc.get(req_value)).decode('UTF-8'))
-                    retstr = ""
-                    print(tweets)
-                    print(int(reqnxt['num']))
-                    if(tweets< int(reqnxt['num'])):
-                        while tweets>0:
-                            tweet = reqnxt['name'] +'#'+ str(tweets)
-                            #inmemc = (memc.get(tweet)).decode('UTF-8')
-                            inmemc = (memc.get(tweet))
-                            if not inmemc:
-                                qu = "SELECT message FROM status WHERE userhash='" + tweet +"'"
-                                conn.query(qu)
-                                rows = conn.store_result()
-                                rows = rows.fetch_row(how=1,maxrows=0)
-                                memc.set(tweet, (rows[0]['message']).decode('UTF-8'), TTL)
-                                retstr+= (rows[0]['message']).decode('UTF-8') + '\n'
-                            else:
-                                inmemc = (memc.get(tweet)).decode('UTF-8')
-                                retstr += inmemc + '\n'
-                            tweets-=1
-                    else:
-                        #retstr = ""
-                        numofrec = int(reqnxt['num'])
-                        while numofrec >0:
-                            tweet = reqnxt['name'] +'#'+ str(tweets)
-                            #inmemc = (memc.get(tweet)).decode('UTF-8')
-                            inmemc = (memc.get(tweet))
-                            if not inmemc:
-                                qu = "SELECT message FROM status WHERE userhash='" + tweet +"'"
-                                conn.query(qu)
-                                rows = conn.store_result()
-                                rows = rows.fetch_row(how=1,maxrows=0)
-                                memc.set(tweet, (rows[0]['message']).decode('UTF-8'), TTL)
-                                retstr+= (rows[0]['message']).decode('UTF-8') + '\n'
-                                print("message is" + (rows[0]['message']).decode('UTF-8') + '\n')
-                            else:
-                                inmemc = (memc.get(tweet)).decode('UTF-8')
-                                retstr += inmemc + '\n'
-                            numofrec-=1
-                            tweets-=1
-                    print(retstr)
+                # req = getMessage(c)
+                # print(req)
+                # req = json.loads(req)
 
-                    c.sendall(setMessage((retstr).encode('UTF-8')))
-                elif reqnxt['query']=='updateUserinfo':
-                    req_value = req['value'] + "#0"
-                    popularfilms = memc.get(req_value)
-                    if not popularfilms:
+            if req['query']=='searchUser':
+                req_value = req['name'] + "#0"
+                num_str = memc.get(req_value)
+                if not num_str:
+                    if debug:
                         print("query from db")
-                        qu = "SELECT * FROM status WHERE userhash='" + req_value +"'"
-                        conn.query(qu)
-                        rows = conn.store_result()
-                        rows = rows.fetch_row(how=1,maxrows=0)
-                        print(rows)
-                        memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
-                        #memc.set(req_value,'0',TTL)
-                    else:
+                    conn.query("SELECT message FROM status WHERE userhash='" + req_value +"'")
+                    rows = conn.store_result().fetch_row(how=1,maxrows=0)
+
+                    #TODO
+                    # Set the TTL appropriately
+                    memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
+                    num_str = rows[0]['message']
+                else:
+                    if(debug):
                         print("query from memc")
-                    tweets = int((memc.get(req_value)).decode('UTF-8'))
-                    print("tweets: " + str(tweets))
-                    qu = "INSERT INTO status (userhash,message) VALUES ('" + req['value']+"#"+str(tweets+1) +"','"+reqnxt['value']+"')"
+                tweets = int(num_str).decode('UTF-8')
+                retstr = ""
+
+                if(debug):
+                    print(tweets)
+                    print(int(req['num']))
+
+                user_postno = []
+                if 'post_nos' in req.keys():
+                    for i in req['post_nos']:
+                        user_postno.append(req['name']+'#'+str(i))
+                else:
+                    requested_numposts = req['num']
+                    while tweets < 1 or requested_numposts < 1:
+                        user_postno.append(req['name']+'#'+tweets)
+                        tweets -=1
+                        requested_numposts -=1
+
+
+                user_posts = get_many(user_postno)
+
+                missed_posts = []
+                for key,value in user_posts.items():
+                    if value == None:
+                        missed_posts.append(key)
+
+                if len(missed_posts)<0:
+                    db_req_keys = "'"+str(missed_posts)+"'"
+                    for i in range(1,len(missed_posts)):
+                        db_req_keys += ","+"'"+str(missed_posts[i])+"'"
+                    db_req_keys = "("+db_req_keys+")"
+                    conn.query("SELECT message FROM status WHERE userhash in " +db_req_keys +"")
+                    rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                    temp_keyvalue = {}
+                    for row in rows:
+                        temp_keyvalue[row['userhash']] = temp_keyvalue[row['message']]
+                        user_posts[row['userhash']] = user_posts[row['message']]
+                    memc.set(temp_keyvalue)
+
+                retstr = ""
+                for key,value in user_posts.items():
+                    retstr = key + " --> " + value
+                if(debug):
+                    print(retstr)
+                c.sendall(setMessage((retstr).encode('UTF-8')))
+
+            elif req['query']=='updateUserinfo':
+                req_value = req['name'] + "#0"
+                popularfilms = memc.get(req_value)
+                if not popularfilms:
+                    print("query from db")
+                    qu = "SELECT * FROM status WHERE userhash='" + req_value +"'"
                     conn.query(qu)
-                    c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
-                    memc.set(req_value, tweets+1, TTL)
-                    qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
-                    conn.query(qu)
+                    rows = conn.store_result()
+                    rows = rows.fetch_row(how=1,maxrows=0)
+                    print(rows)
+                    memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
+                    #memc.set(req_value,'0',TTL)
+                else:
+                    print("query from memc")
+                tweets = int((memc.get(req_value)).decode('UTF-8'))
+                print("tweets: " + str(tweets))
+                qu = "INSERT INTO status (userhash,message) VALUES ('" + req['value']+"#"+str(tweets+1) +"','"+req['value']+"')"
+                conn.query(qu)
+                c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
+                memc.set(req_value, tweets+1, TTL)
+                qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
+                conn.query(qu)
 
 
         except Exception as e:
