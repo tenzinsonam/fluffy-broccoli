@@ -22,7 +22,7 @@ def getMessage(s):
     return s.recv(int(rawn)).decode('UTF-8')
 
 s = socket.socket()
-s.connect((SERVER_IP, PORT))
+s.connect((SERVER_IP, int(sys.argv[1])))
 
 inp = ""
 
@@ -100,4 +100,15 @@ elif que == "update":
     if jrec['code']==1:
         print(jrec['response'])
     #print(rec)
+
+
+elif que=="delete":
+    data = {'query':'deleteUser'}
+    json_string = json.dumps(data)
+    s.sendall(setMessage((json_string).encode('UTF-8')))
+    rec = getMessage(s)
+    jrec = json.loads(rec)
+    if jrec['code']==1:
+        print(jrec['response'])
+
 s.close()
