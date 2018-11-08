@@ -124,6 +124,7 @@ elif que == "update":
     #print(json_string)
     s.sendall(setMessage((json_string).encode('UTF-8')))
     rec = getMessage(s)
+    print(rec)
     jrec = json.loads(rec)
     if jrec['code']==1:
         print(jrec['response'])
@@ -131,7 +132,7 @@ elif que == "update":
 
 
 elif que=="delete":
-    data = {'query':'deleteUser'}
+    data = {'query':'deleteUser','name':username}
     json_string = json.dumps(data)
     s.sendall(setMessage((json_string).encode('UTF-8')))
     rec = getMessage(s)

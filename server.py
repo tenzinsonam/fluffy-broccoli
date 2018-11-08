@@ -150,7 +150,8 @@ while True:
                     print(retstr)
                 c.sendall(setMessage((retstr).encode('UTF-8')))
 
-            elif req['query']=='updateUserinfo':
+            if req['query']=='updateUserinfo':
+                print('update')
                 req_value = req['name'] + "#0"
                 popularfilms = memc.get(req_value)
                 if not popularfilms:
@@ -173,23 +174,23 @@ while True:
                 qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
                 conn.query(qu)
 
-                elif reqnxt['query'] =='deleteUser':
-                    userZero = req['value'] +'#0'
-                    memcacheUserZero = memc.get(userZero)
-                    if memcacheUserZero:
-                        memc.set(userZero, -1*memcacheUserZero, TTL)
-                    print("query from db")
-                    qu = "SELECT * FROM status WHERE userhash='" + userZero +"';"
-                    conn.query(qu)
-                    rows = conn.store_result()
-                    rows = rows.fetch_row(how=1, maxrows=0)
-                    tweetnum = int((rows[0]['message']).decode('UTF-8'))
-                    print(tweetnum)
-                    qu = "UPDATE status SET message='" + str(-1*tweetnum)  + "' WHERE userhash='"+userZero+"';"
-                    conn.query(qu)
-                    c.sendall(setMessage(json.dumps({'code':1, 'response':"User deleted"})).encode('UTF-8'))
-                    qu = "DELETE FROM status WHERE userhash LIKE '" + userZero[:-1] + "%';"
-                    conn.query(qu)
+            if req['query'] =='deleteUser':
+                userZero = req['name'] +'#0'
+                memcacheUserZero = memc.get(userZero)
+                if memcacheUserZero:
+                    memc.set(userZero, -1*memcacheUserZero, TTL)
+                print("query from db")
+                qu = "SELECT * FROM status WHERE userhash='" + userZero +"';"
+                conn.query(qu)
+                rows = conn.store_result()
+                rows = rows.fetch_row(how=1, maxrows=0)
+                tweetnum = int((rows[0]['message']).decode('UTF-8'))
+                print(tweetnum)
+                qu = "UPDATE status SET message='" + str(-1*tweetnum)  + "' WHERE userhash='"+userZero+"';"
+                conn.query(qu)
+                c.sendall(setMessage(json.dumps({'code':1, 'response':"User deleted"})).encode('UTF-8'))
+                qu = "DELETE FROM status WHERE userhash LIKE '" + userZero[:-1] + "%';"
+                conn.query(qu)
 
 
 
