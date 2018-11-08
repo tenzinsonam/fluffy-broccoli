@@ -34,3 +34,19 @@ create table named filmorder with columns film_id,title, rental_rate
 	decrement it, making use of dhruvkmr#-4 or (-5 etc, whatever), to set
 	the value of dhruvkmr#0 to the postno of last undeleted post with maximum
 	post value
+
+3. Add support for '#latest<timestamp>' key whose value would be the username#postid 
+	of the newly added post at time <timestamp>
+	Set the expiration time of this key in memcached to be 20 seconds
+	Clearly if a new post comes at same timestamp, append its' key to the value of #latest<timestamp>
+
+	CLearly there would be atmost 20 #latest<timestamp> entries in the memcache
+
+	If I need to get the latest posts. Get the current timestamp = currtmp
+	search for #latest<currtmp>, #latest<currtmp-1> ... #latest<currtmp-20>
+
+	DO NOT STORE #latest<timestamp> in database.
+	Neither do search for this key in database, if memcahed search fails
+	It's just a temporary storage for latest update, utilizing memcached expiration policy
+
+
