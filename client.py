@@ -102,6 +102,7 @@ else:
 #    update <enter>
 #        <Your Post>
 #    ''')
+
 print('Enter query type')
 que = input()
 if que == "search":
