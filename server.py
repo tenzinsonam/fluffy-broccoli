@@ -34,6 +34,14 @@ def createDatabaseConn():
                             db = "cs632")
     return conn
 
+#<<<<<<< HEAD
+
+
+
+
+#=======
+#>>>>>>> ea7ac77db1c76406e0b416437f795312c42342cd
+#check it brotha line 134
 # Don't forget to run 'memcached' before running this next line:
 memc = base.Client(('127.0.0.1',11211));
 '''
@@ -89,13 +97,16 @@ while True:
                 # req = json.loads(req)
 
             if req['query']=='searchUser':
+                print("art thou in search")
                 req_value = req['name'] + "#0"
-                num_str = memc.get(req_value)
+                num_str = (memc.get(req_value))
                 if not num_str:
                     if debug:
                         print("query from db")
                     conn.query("SELECT message FROM status WHERE userhash='" + req_value +"'")
                     rows = conn.store_result().fetch_row(how=1,maxrows=0)
+
+                    #TODO if the search user doesn't exist in the database
 
                     #TODO
                     # Set the TTL appropriately
@@ -104,7 +115,7 @@ while True:
                 else:
                     if(debug):
                         print("query from memc")
-                tweets = int(num_str).decode('UTF-8')
+                tweets = int(num_str.decode('UTF-8'))
                 retstr = ""
 
                 if(debug):
@@ -116,36 +127,41 @@ while True:
                     for i in req['post_nos']:
                         user_postno.append(req['name']+'#'+str(i))
                 else:
-                    requested_numposts = req['num']
-                    while tweets < 1 or requested_numposts < 1:
-                        user_postno.append(req['name']+'#'+tweets)
+                    requested_numposts = int(req['num'])
+                    while tweets >= 1 and requested_numposts >= 1:
+                        user_postno.append(req['name']+'#'+str(tweets))
                         tweets -=1
                         requested_numposts -=1
 
+                #check it brotha
+                user_posts = memc.get_many(user_postno)
 
-                user_posts = get_many(user_postno)
-
+                print(user_posts)
                 missed_posts = []
-                for key,value in user_posts.items():
-                    if value == None:
+                for key in user_postno:
+                    if key not in user_posts.keys():
                         missed_posts.append(key)
 
-                if len(missed_posts)<0:
-                    db_req_keys = "'"+str(missed_posts)+"'"
+                print('Missed posts ->' +str(missed_posts))
+                if len(missed_posts)>0:
+                    db_req_keys = "'"+str(missed_posts[0])+"'"
                     for i in range(1,len(missed_posts)):
                         db_req_keys += ","+"'"+str(missed_posts[i])+"'"
                     db_req_keys = "("+db_req_keys+")"
-                    conn.query("SELECT message FROM status WHERE userhash in " +db_req_keys +"")
+                    conn.query("SELECT userhash,message FROM status WHERE userhash in " +db_req_keys +"")
                     rows = conn.store_result().fetch_row(how=1,maxrows=0)
                     temp_keyvalue = {}
                     for row in rows:
-                        temp_keyvalue[row['userhash']] = temp_keyvalue[row['message']]
-                        user_posts[row['userhash']] = user_posts[row['message']]
-                    memc.set(temp_keyvalue)
+                        print(row)
+                        temp_keyvalue[row['userhash']] = row['message']
+                        user_posts[row['userhash']] = row['message']
+                    memc.set_many(temp_keyvalue)
 
+                
                 retstr = ""
                 for key,value in user_posts.items():
-                    retstr = key + " --> " + value
+                    retstr += str(key) + " --> " + str(value.decode('UTF-8'))+"\n"
+                print(retstr)
                 if(debug):
                     print(retstr)
                 c.sendall(setMessage((retstr).encode('UTF-8')))
@@ -167,7 +183,7 @@ while True:
                     print("query from memc")
                 tweets = int((memc.get(req_value)).decode('UTF-8'))
                 print("tweets: " + str(tweets))
-                qu = "INSERT INTO status (userhash,message) VALUES ('" + req['value']+"#"+str(tweets+1) +"','"+req['value']+"')"
+                qu = "INSERT INTO status (userhash,message) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"')"
                 conn.query(qu)
                 c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                 memc.set(req_value, tweets+1, TTL)
@@ -192,8 +208,16 @@ while True:
                 qu = "DELETE FROM status WHERE userhash LIKE '" + userZero[:-1] + "%';"
                 conn.query(qu)
 
+                '''
+                elif reqnxt['query']=='deleteComm':
+                    userZero = req['value'] + '#0'
+                    memcacheUserZero = int((memc.get(userZero)).decode('UTF-8'))
+                    if not memcacheUserZero:
 
+                    else:
+                        memc.set()
 
+                '''
 
 
 
