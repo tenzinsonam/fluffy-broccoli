@@ -13,6 +13,7 @@ create table named filmorder with columns film_id,title, rental_rate
 	then delete those entries and return empty corresponding to those entries
 
 2. Add support for deletei <my_postno>
+	Also for delete_range <starting postno> <ending postno>
 	We would be using Smart Delete Strategy, according to which
 	dhruvkmr#0 -> Post_no of the last post (as before)
 	dhruvkmr#-1 -> The post_nos of deleted posts numbered from 1-100
