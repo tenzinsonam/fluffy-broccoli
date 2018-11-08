@@ -44,15 +44,8 @@ memc = HashClient(
 '''
 
 
-'''
-conn = _mysql.connect (host = "localhost",
-                        user = "user",
-                        passwd = "password",
-                        db = "cs632")
-'''
-
 s = socket.socket()
-s.bind(('', PORT))
+s.bind(('', int(sys.argv[1])))
 s.listen(5)
 
 # Request to be processed
@@ -179,6 +172,28 @@ while True:
                 memc.set(req_value, tweets+1, TTL)
                 qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
                 conn.query(qu)
+
+                elif reqnxt['query'] =='deleteUser':
+                    userZero = req['value'] +'#0'
+                    memcacheUserZero = memc.get(userZero)
+                    if memcacheUserZero:
+                        memc.set(userZero, -1*memcacheUserZero, TTL)
+                    print("query from db")
+                    qu = "SELECT * FROM status WHERE userhash='" + userZero +"';"
+                    conn.query(qu)
+                    rows = conn.store_result()
+                    rows = rows.fetch_row(how=1, maxrows=0)
+                    tweetnum = int((rows[0]['message']).decode('UTF-8'))
+                    print(tweetnum)
+                    qu = "UPDATE status SET message='" + str(-1*tweetnum)  + "' WHERE userhash='"+userZero+"';"
+                    conn.query(qu)
+                    c.sendall(setMessage(json.dumps({'code':1, 'response':"User deleted"})).encode('UTF-8'))
+                    qu = "DELETE FROM status WHERE userhash LIKE '" + userZero[:-1] + "%';"
+                    conn.query(qu)
+
+
+
+
 
 
         except Exception as e:

@@ -1,8 +1,8 @@
--- MySQL dump 10.16  Distrib 10.1.36-MariaDB, for Linux (x86_64)
+-- MySQL dump 10.13  Distrib 5.7.24, for Linux (x86_64)
 --
 -- Host: localhost    Database: cs632
 -- ------------------------------------------------------
--- Server version	10.1.36-MariaDB
+-- Server version	5.7.24-0ubuntu0.16.04.1
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -59,7 +59,7 @@ CREATE TABLE `status` (
 
 LOCK TABLES `status` WRITE;
 /*!40000 ALTER TABLE `status` DISABLE KEYS */;
-INSERT INTO `status` VALUES ('popeye#0','0'),('popyeye#0','0'),('jj#0','0');
+INSERT INTO `status` VALUES ('popeye#0','0'),('popyeye#0','0'),('jj#0','0'),('opop#0','0'),('popo#0','0'),('pop#0','0'),('asdf#0','0'),('toto#0','0'),('toto1','asdf'),('toto2','asdfasdfc'),('toto3','agsehg'),('toto#4','afdsasdf'),('toto#5','sdafgasdf'),('azaz#0','4'),('azaz#1','asdfgasdf'),('azaz#2','agges'),('update#0','0'),('azaz#3','gerthh'),('azaz#4','dlfkkjd'),('dasdf#0','0');
 /*!40000 ALTER TABLE `status` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -95,4 +95,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-10-31  3:31:04
+-- Dump completed on 2018-10-31 11:44:50
