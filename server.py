@@ -34,13 +34,14 @@ def createDatabaseConn():
                             db = "cs632")
     return conn
 
-<<<<<<< HEAD
+#<<<<<<< HEAD
 
 
 
 
-=======
->>>>>>> ea7ac77db1c76406e0b416437f795312c42342cd
+#=======
+#>>>>>>> ea7ac77db1c76406e0b416437f795312c42342cd
+#check it brotha line 134
 # Don't forget to run 'memcached' before running this next line:
 memc = base.Client(('127.0.0.1',11211));
 '''
@@ -96,8 +97,9 @@ while True:
                 # req = json.loads(req)
 
             if req['query']=='searchUser':
+                print("art thou in search")
                 req_value = req['name'] + "#0"
-                num_str = memc.get(req_value)
+                num_str = (memc.get(req_value)).decode('UTF-8')
                 if not num_str:
                     if debug:
                         print("query from db")
@@ -111,7 +113,7 @@ while True:
                 else:
                     if(debug):
                         print("query from memc")
-                tweets = int(num_str).decode('UTF-8')
+                tweets = int(num_str)#.decode('UTF-8')
                 retstr = ""
 
                 if(debug):
@@ -123,13 +125,13 @@ while True:
                     for i in req['post_nos']:
                         user_postno.append(req['name']+'#'+str(i))
                 else:
-                    requested_numposts = req['num']
+                    requested_numposts = int(req['num'])
                     while tweets < 1 or requested_numposts < 1:
                         user_postno.append(req['name']+'#'+tweets)
                         tweets -=1
                         requested_numposts -=1
 
-
+                #check it brotha
                 user_posts = get_many(user_postno)
 
                 missed_posts = []
@@ -199,7 +201,7 @@ while True:
                 qu = "DELETE FROM status WHERE userhash LIKE '" + userZero[:-1] + "%';"
                 conn.query(qu)
 
-
+                '''
                 elif reqnxt['query']=='deleteComm':
                     userZero = req['value'] + '#0'
                     memcacheUserZero = int((memc.get(userZero)).decode('UTF-8'))
@@ -208,7 +210,7 @@ while True:
                     else:
                         memc.set()
 
-
+                '''
 
 
 

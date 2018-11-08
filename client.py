@@ -43,6 +43,7 @@ while True:
 user =""
 print('Enter your username')
 while True:
+
     username = input()
     if inp.lower() == 'n':
         data = {'query':'UserExists?','value':username,'createUserIfNotExists':True}
@@ -102,8 +103,11 @@ else:
 #    update <enter>
 #        <Your Post>
 #    ''')
+s.close()
 print('Enter query type')
 que = input()
+s = socket.socket()
+s.connect((SERVER_IP, int(sys.argv[1])))
 if que == "search":
     print('username to search')
     nm = input()
