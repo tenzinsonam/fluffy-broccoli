@@ -48,7 +48,7 @@ while True:
 
     username = input()
     if inp.lower() == 'n':
-        data = {'query':'UserExists?','value':username,'createUserIfNotExists':True}
+        data = {'query':'UserExists?','value':username,'createUserIfNotExists':True,'name':username}
         s.sendall(setMessage((json.dumps(data)).encode('UTF-8')))
         jrec = json.loads(getMessage(s))
         if jrec['code']==0:
@@ -60,7 +60,7 @@ while True:
         else:
             print('Something went wrong')
     elif inp.lower() == 'y':
-        data = {'query':'UserExists?','value':username,'createUserIfNotExists':False}
+        data = {'query':'UserExists?','value':username,'createUserIfNotExists':False,'name':username}
         s.sendall(setMessage((json.dumps(data)).encode('UTF-8')))
         jrec = json.loads(getMessage(s))
         if jrec['code']==0:

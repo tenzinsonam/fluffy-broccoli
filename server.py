@@ -1,4 +1,5 @@
 import json
+import time
 import os
 import sys
 import _mysql
@@ -38,14 +39,56 @@ def createDatabaseConn():
 
 #<<<<<<< HEAD
 
+def getmemc(): 
+    return base.Client(('127.0.0.1',11211));
 
+def attemptLock(conn,memc,username):
+    response,cas = memc.gets('#status:'+username+':1') # response denotes if the lock exists
+    if response is None:
+        print('Lock not found in memcached')
+        ar = conn.query('update locks set status=1 where user="'+str(username)+'" and status=0;')
+        if conn.affected_rows() == 0:
+            print('Lock already in db')
+            return False
+        else:
+            print('Lock acquired in db')
+            #if memc.cas(key = '#status:'+username+':1',value = 1,cas = cas):
+            if memc.add('#status:'+username+':1',1):
+                return True
+            else:
+                print("Something conflicted with cache, lockattempt back-offed") 
+                conn.query('update locks set status=0 where user="'+str(username)+'" and status=1;')
+                return False 
+    else:
+        print('Lock in memcached') 
+        return False 
+    '''
+    elif int(response)==1:
+        return False
+    elif int(response)==0:
+        if memc.add(response,1,cas):
+    '''
 
+def releaseLock(conn,memc,username):
+    response,cas = memc.gets('#status:'+username+':1')
+    if response is None:
+        ## Lock entry got evicted from Memcached
+        pass
+    else:
+        memc.delete('#status:'+username+':1')
+    conn.query('update locks set status=0 where user="'+str(username)+'";')
+     
+            
+
+#                        conn.query(qu)
+#                        rows = conn.store_result()
+#                        rows = rows.fetch_row(how=1,maxrows=0)
+ 
 
 #=======
 #>>>>>>> ea7ac77db1c76406e0b416437f795312c42342cd
 #check it brotha line 134
 # Don't forget to run 'memcached' before running this next line:
-memc = base.Client(('127.0.0.1',11211));
 '''
 memc = HashClient(
     ('localhost', 11211),
@@ -70,6 +113,8 @@ while True:
             print(req)
             req = json.loads(req)
 
+            memc = getmemc()
+
             if req['query']=='UserExists?':
                 breakLoop = False 
                 while not breakLoop:
@@ -88,12 +133,16 @@ while True:
                             c.sendall(setMessage(json.dumps({'code':1,'response':'User doesn\'t Exists\n'})).encode('UTF-8'))
                         else:
                             #memc.set(req_value,'0',TTL)
-                            if not memc.cas(req_value,'0',cas,expire=TTL):
+                            #if not memc.cas(key = req_value,value = '0',cas = cas):
+                            #    continue
+                            if not memc.add(key = req_value,value='0'):
                                 continue
-                            qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req_value +"','0', -1)"
+                            qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req_value +"','0', -1);"
+                            conn.query(qu)
+                            qu = "INSERT INTO locks (user,status) VALUES ('" + req['name']+ "','0')"
                             conn.query(qu)
                             c.sendall(setMessage(json.dumps({'code':1,'response':'User Created Successfully'})).encode('UTF-8'))
-                       #print("Updated memcached with MySQL data")
+                        #print("Updated memcached with MySQL data")
                     else:
                         print("Loaded data from memcached")
                         c.sendall(setMessage(json.dumps({'code':0,'response':'User Exists\n'})).encode('UTF-8'))
@@ -104,6 +153,7 @@ while True:
                     # req = json.loads(req)
 
             if req['query']=='searchUser':
+
                 print("art thou in search")
                 req_value = req['name'] + "#0"
                 num_str = (memc.get(req_value))
@@ -175,191 +225,241 @@ while True:
                 c.sendall(setMessage((retstr).encode('UTF-8')))
 
             if req['query']=='updateUserinfo':
-                print('update')
-                req_value = req['name'] + "#0"
-                popularfilms = memc.get(req_value)
-                if not popularfilms:
-                    print("query from db")
-                    qu = "SELECT * FROM status WHERE userhash='" + req_value +"'"
+                while not attemptLock(conn,memc,req['name']):
+                    time.sleep(0.001)
+
+                try:
+                    while(True):
+                        pass
+                    print('update')
+                    req_value = req['name'] + "#0"
+                    print(req_value)
+                    popularfilms = memc.get(req_value)
+                    if not popularfilms:
+                        print("query from db")
+                        qu = "SELECT * FROM status WHERE userhash='" + req_value +"'"
+                        conn.query(qu)
+                        rows = conn.store_result()
+                        rows = rows.fetch_row(how=1,maxrows=0)
+                        print(rows)
+                        memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
+                        #memc.set(req_value,'0',TTL)
+                    else:
+                        print("query from memc")
+                    tweets = int((memc.get(req_value)).decode('UTF-8'))
+                    print("tweets: " + str(tweets))
+                    qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
                     conn.query(qu)
-                    rows = conn.store_result()
-                    rows = rows.fetch_row(how=1,maxrows=0)
-                    print(rows)
-                    memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
-                    #memc.set(req_value,'0',TTL)
-                else:
-                    print("query from memc")
-                tweets = int((memc.get(req_value)).decode('UTF-8'))
-                print("tweets: " + str(tweets))
-                qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
-                conn.query(qu)
-                c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
-                memc.set(req_value, tweets+1, TTL)
-                qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
-                conn.query(qu)
+                    c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
+                    memc.set(req_value, tweets+1, TTL)
+                    qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
+                    conn.query(qu)
+
+                except Exception as e:
+                    print(traceback.format_exc())
+                    print(sys.exc_info()[0])
+                finally:
+                    releaseLock(conn,memc,req['name'])
 
             if req['query'] =='deleteUser':
-                userZero = req['name'] +'#0'
-                memcacheUserZero = memc.get(userZero)
-                if memcacheUserZero:
-                    memc.set(userZero, -1*int((memcacheUserZero).decode('UTF-8')), TTL)
-                print("query from db")
-                qu = "SELECT * FROM status WHERE userhash='" + userZero +"';"
-                conn.query(qu)
-                rows = conn.store_result()
-                rows = rows.fetch_row(how=1, maxrows=0)
-                tweetnum = int((rows[0]['message']).decode('UTF-8'))
-                print(tweetnum)
-                qu = "UPDATE status SET message='" + str(-1*tweetnum)  + "' WHERE userhash='"+userZero+"';"
-                conn.query(qu)
-                c.sendall(setMessage(json.dumps({'code':1, 'response':"User deleted"})).encode('UTF-8'))
-                qu = "DELETE FROM status WHERE userhash LIKE '" + userZero[:-1] + "%';"
-                conn.query(qu)
+                while not attemptLock(conn,memc,req['name']):
+                    time.sleep(0.001)
 
-                '''
-                elif reqnxt['query']=='deleteComm':
-                    userZero = req['value'] + '#0'
-                    memcacheUserZero = int((memc.get(userZero)).decode('UTF-8'))
-                    if not memcacheUserZero:
+                try:
+                    userZero = req['name'] +'#0'
+                    memcacheUserZero = memc.get(userZero)
+                    if memcacheUserZero:
+                        memc.set(userZero, -1*int((memcacheUserZero).decode('UTF-8')), TTL)
+                    print("query from db")
+                    qu = "SELECT * FROM status WHERE userhash='" + userZero +"';"
+                    conn.query(qu)
+                    rows = conn.store_result()
+                    rows = rows.fetch_row(how=1, maxrows=0)
+                    tweetnum = int((rows[0]['message']).decode('UTF-8'))
+                    print(tweetnum)
+                    qu = "UPDATE status SET message='" + str(-1*tweetnum)  + "' WHERE userhash='"+userZero+"';"
+                    conn.query(qu)
+                    c.sendall(setMessage(json.dumps({'code':1, 'response':"User deleted"})).encode('UTF-8'))
 
-                    else:
-                        memc.set()
+                    qu = "DELETE FROM status WHERE userhash LIKE '" + userZero[:-1] + "%';"
+                    qu = "DELETE FROM locks WHERE user = '"+req['name']+"';"
+                    conn.query(qu)
 
-                '''
+                    '''
+                    elif reqnxt['query']=='deleteComm':
+                        userZero = req['value'] + '#0'
+                        memcacheUserZero = int((memc.get(userZero)).decode('UTF-8'))
+                        if not memcacheUserZero:
+
+                        else:
+                            memc.set()
+
+                    '''
+
+                except Exception as e:
+                    print(traceback.format_exc())
+                    print(sys.exc_info()[0])
+                finally:
+                    releaseLock(conn,memc,req['name'])
+
 
 
             #TODO tricky #0 updates
             if req['query']=='deletePosts':
-                userZero = req['name']+'#0'
-                memcacheUserZero = memc.get(userZero)   #used later
-                print('query from db')
-                qu = "SELECT * FROM status WHERE userhash='" +userZero+"';"
-                conn.query(qu)
-                rows = conn.store_result();
-                rows = rows.fetch_row(how=1, maxrows=0)
-                tweetnum = int((rows[0]['message']).decode('UTF-8'))
-                if req['value'].find('-')!=-1:
-                    deleteRange = req['value'].split('-')
-                    deleteRange = [int(x) for x in deleteRange]
-                    negativeDict = {}
-                    for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
-                        negativeDict[str(x)] = []
-                        qu = "SELECT * FROM status WHERE userhash='" + userZero[:-1] +str(-1*x)+"';"
+                while not attemptLock(conn,memc,req['name']):
+                    time.sleep(0.001)
+
+                try:
+     
+                    userZero = req['name']+'#0'
+                    memcacheUserZero = memc.get(userZero)   #used later
+                    print('query from db')
+                    qu = "SELECT * FROM status WHERE userhash='" +userZero+"';"
+                    conn.query(qu)
+                    rows = conn.store_result();
+                    rows = rows.fetch_row(how=1, maxrows=0)
+                    tweetnum = int((rows[0]['message']).decode('UTF-8'))
+                    if req['value'].find('-')!=-1:
+                        deleteRange = req['value'].split('-')
+                        deleteRange = [int(x) for x in deleteRange]
+                        negativeDict = {}
+                        for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
+                            negativeDict[str(x)] = []
+                            qu = "SELECT * FROM status WHERE userhash='" + userZero[:-1] +str(-1*x)+"';"
+                            conn.query(qu)
+                            rows = conn.store_result()
+                            rows = rows.fetch_row(how=1, maxrows=0)
+                            if(len(rows)==0):
+                                qu = "INSERT INTO status (userhash, message, expires) VALUES ('" + userZero[:-1]+str(-1*x) +"','',-1);"
+                                conn.query(qu)
+                            else:
+                                negativeDict[str(x)].append(rows[0]['message'].decode('UTF-8'))
+
+                        deleteRangeExpanded = []
+                        for x in range(deleteRange[0], deleteRange[1]+1):
+                            deleteRangeExpanded.append(str(x))
+                            qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(x) +"';"
+                            negativeDict[str(math.ceil(x/100))].append(str(x))
+                            conn.query(qu)
+                        memc.delete_many(deleteRangeExpanded)
+
+                        #update #0
+                        #TODO cehck if value of #0 goes out of range
+                        if tweetnum>=deleteRange[0] and tweetnum<=deleteRange[1]:
+                            inRange = math.ceil(tweetnum/100)
+                            tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                            while(len(tempList)==100):
+                                inRange-=1
+                                #if str(inRange)
+                                tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                            possibleValue = inRange*100
+                            for x in range(inRange*100, (inRange-1)*100, -1):
+                                if x not in tempList:
+                                    possibleValue=x
+
+                            qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
+                            conn.query(qu)
+
+
+
+                            if memcacheUserZero:
+                                memc.set(userZero,str(possibleValue) , TTL)
+                        for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
+                            qu = "UPDATE status SET message='" + ",".join(negativeDict[str(x)])+"' WHERE userhash='" +userZero[:-1]+str(-1*x)+"';"
+                            conn.query(qu)
+
+                    else:
+                        deleteRow = int(req['value'])
+                        negativeDict = {}
+                        qu = "SELECT * FROM status WHERE userhash='" + userZero[:-1] +str(-1*math.ceil(deleteRow/100))+"';"
+                        negativeDict[str(math.ceil(deleteRow/100))] = []
                         conn.query(qu)
                         rows = conn.store_result()
                         rows = rows.fetch_row(how=1, maxrows=0)
                         if(len(rows)==0):
-                            qu = "INSERT INTO status (userhash, message, expires) VALUES ('" + userZero[:-1]+str(-1*x) +"','',-1);"
+                            qu = "INSERT INTO status (userhash, message, expires) VALUES ('" + userZero[:-1] +str(-1*math.ceil(deleteRow/100)) +"','',-1);"
                             conn.query(qu)
                         else:
-                            negativeDict[str(x)].append(rows[0]['message'].decode('UTF-8'))
-
-                    deleteRangeExpanded = []
-                    for x in range(deleteRange[0], deleteRange[1]+1):
-                        deleteRangeExpanded.append(str(x))
-                        qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(x) +"';"
-                        negativeDict[str(math.ceil(x/100))].append(str(x))
+                            negativeDict[str(math.ceil(deleteRow/100))].append(rows[0]['message'].decode('UTF-8'))
+                        negativeDict[str(math.ceil(deleteRow/100))].append(str(deleteRow))
+                        qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(deleteRow) +"';"
                         conn.query(qu)
-                    memc.delete_many(deleteRangeExpanded)
 
-                    #update #0
-                    #TODO cehck if value of #0 goes out of range
-                    if tweetnum>=deleteRange[0] and tweetnum<=deleteRange[1]:
-                        inRange = math.ceil(tweetnum/100)
-                        tempList = (",".join(negativeDict[str(inRange)])).split(',')
-                        while(len(tempList)==100):
-                            inRange-=1
-                            #if str(inRange)
+                        if tweetnum==deleteRow:
+                            inRange = math.ceil(tweetnum/100)
                             tempList = (",".join(negativeDict[str(inRange)])).split(',')
-                        possibleValue = inRange*100
-                        for x in range(inRange*100, (inRange-1)*100, -1):
-                            if x not in tempList:
-                                possibleValue=x
+                            while(len(tempList)==100):
+                                inRange-=1
+                                i#f str(inRange)
+                                tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                            possibleValue = inRange*100
+                            for x in range(inRange*100, (inRange-1)*100, -1):
+                                if x not in tempList:
+                                    possibleValue=x
 
-                        qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
+                            qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
+                            conn.query(qu)
+
+
+
+                            if memcacheUserZero:
+                                memc.set(userZero,str(possibleValue) , TTL)
+
+
+                        qu = "UPDATE status SET message='" +",".join(negativeDict[str(math.ceil(deleteRow/100))]) +"' WHERE userhash='" +userZero[:-1] +str(-1*math.ceil(deleteRow/100))+"';"
                         conn.query(qu)
 
+                    c.sendall(setMessage(json.dumps({'code':1, 'response':"User posts deleted"})).encode('UTF-8'))
 
+                except Exception as e:
+                    print(traceback.format_exc())
+                    print(sys.exc_info()[0])
+                finally:
+                    releaseLock(conn,memc,req['name'])
 
-                        if memcacheUserZero:
-                            memc.set(userZero,str(possibleValue) , TTL)
-                    for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
-                        qu = "UPDATE status SET message='" + ",".join(negativeDict[str(x)])+"' WHERE userhash='" +userZero[:-1]+str(-1*x)+"';"
-                        conn.query(qu)
-
-                else:
-                    deleteRow = int(req['value'])
-                    negativeDict = {}
-                    qu = "SELECT * FROM status WHERE userhash='" + userZero[:-1] +str(-1*math.ceil(deleteRow/100))+"';"
-                    negativeDict[str(math.ceil(deleteRow/100))] = []
-                    conn.query(qu)
-                    rows = conn.store_result()
-                    rows = rows.fetch_row(how=1, maxrows=0)
-                    if(len(rows)==0):
-                        qu = "INSERT INTO status (userhash, message, expires) VALUES ('" + userZero[:-1] +str(-1*math.ceil(deleteRow/100)) +"','',-1);"
-                        conn.query(qu)
-                    else:
-                        negativeDict[str(math.ceil(deleteRow/100))].append(rows[0]['message'].decode('UTF-8'))
-                    negativeDict[str(math.ceil(deleteRow/100))].append(str(deleteRow))
-                    qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(deleteRow) +"';"
-                    conn.query(qu)
-
-                    if tweetnum==deleteRow:
-                        inRange = math.ceil(tweetnum/100)
-                        tempList = (",".join(negativeDict[str(inRange)])).split(',')
-                        while(len(tempList)==100):
-                            inRange-=1
-                            i#f str(inRange)
-                            tempList = (",".join(negativeDict[str(inRange)])).split(',')
-                        possibleValue = inRange*100
-                        for x in range(inRange*100, (inRange-1)*100, -1):
-                            if x not in tempList:
-                                possibleValue=x
-
-                        qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
-                        conn.query(qu)
-
-
-
-                        if memcacheUserZero:
-                            memc.set(userZero,str(possibleValue) , TTL)
-
-
-                    qu = "UPDATE status SET message='" +",".join(negativeDict[str(math.ceil(deleteRow/100))]) +"' WHERE userhash='" +userZero[:-1] +str(-1*math.ceil(deleteRow/100))+"';"
-                    conn.query(qu)
-
-                c.sendall(setMessage(json.dumps({'code':1, 'response':"User posts deleted"})).encode('UTF-8'))
 
 
             if req['query']=='updateTill':
-                userZero = req['name']+'#0'
-                #newTTL = req['time']
-                req_value = req['name'] + "#0"
-                timenow = datetime.datetime.now()
-                #deltaParam = "=".join()
-                deltaParam =[int(req['time'][2]),int(req['time'][1]),int(req['time'][0]),0]
-                print(deltaParam)
-                newTTL = (timenow + datetime.timedelta(hours=deltaParam[0], minutes=deltaParam[1], seconds=deltaParam[2])).strftime("%Y-%m-%d %H:%M:%S")
-                memcacheUserZero = memc.get(userZero)
-                if not memcacheUserZero:
-                    print("query from db")
-                    qu = "SELECT * FROM status WHERE userhash='" + userZero +"'"
+                while not attemptLock(conn,memc,req['name']):
+                    time.sleep(0.001)
+
+                try:
+ 
+                    userZero = req['name']+'#0'
+                    #newTTL = req['time']
+                    req_value = req['name'] + "#0"
+                    timenow = datetime.datetime.now()
+                    #deltaParam = "=".join()
+                    deltaParam =[int(req['time'][2]),int(req['time'][1]),int(req['time'][0]),0]
+                    print(deltaParam)
+                    newTTL = (timenow + datetime.timedelta(hours=deltaParam[0], minutes=deltaParam[1], seconds=deltaParam[2])).strftime("%Y-%m-%d %H:%M:%S")
+                    memcacheUserZero = memc.get(userZero)
+                    if not memcacheUserZero:
+                        print("query from db")
+                        qu = "SELECT * FROM status WHERE userhash='" + userZero +"'"
+                        conn.query(qu)
+                        rows = conn.store_result()
+                        rows = rows.fetch_row(how=1,maxrows=0)
+                        print(rows)
+                        #memc.set(req_value, (rows[0]['message']).decode('UTF-8'), int(newTTL))
+                        memcacheUserZero = rows[0]['message']
+                    else:
+                        print("query from memc")
+                    tweets = int(memcacheUserZero.decode('UTF-8'))
+                    qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"','" +str(newTTL)+"');"
                     conn.query(qu)
-                    rows = conn.store_result()
-                    rows = rows.fetch_row(how=1,maxrows=0)
-                    print(rows)
-                    #memc.set(req_value, (rows[0]['message']).decode('UTF-8'), int(newTTL))
-                    memcacheUserZero = rows[0]['message']
-                else:
-                    print("query from memc")
-                tweets = int(memcacheUserZero.decode('UTF-8'))
-                qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"','" +str(newTTL)+"');"
-                conn.query(qu)
-                c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
-                memc.set(userZero, tweets+1, newTTL)
-                print(datetime.datetime.now())
-                qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
-                conn.query(qu)
+                    c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
+                    memc.set(userZero, tweets+1, newTTL)
+                    print(datetime.datetime.now())
+                    qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
+                    conn.query(qu)
+
+                except Exception as e:
+                    print(traceback.format_exc())
+                    print(sys.exc_info()[0])
+                finally:
+                    releaseLock(conn,memc,req['name'])
+
 
 
 
@@ -368,6 +468,7 @@ while True:
             print(str(e))
             traceback.print_exc()
         finally:
+            memc.close()
             c.close()
             exit(0)
 
