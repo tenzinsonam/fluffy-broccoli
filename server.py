@@ -332,8 +332,9 @@ while True:
                 req_value = req['name'] + "#0"
                 timenow = datetime.datetime.now()
                 #deltaParam = "=".join()
-                #TODO chenge from only hours
-                newTTL = (timenow + datetime.timedelta(hours=int(req['time'][1]))).strftime("%Y-%m-%d %H:%M:%S")
+                deltaParam =[int(req['time'][2]),int(req['time'][1]),int(req['time'][0]),0]
+                print(deltaParam)
+                newTTL = (timenow + datetime.timedelta(hours=deltaParam[0], minutes=deltaParam[1], seconds=deltaParam[2])).strftime("%Y-%m-%d %H:%M:%S")
                 memcacheUserZero = memc.get(userZero)
                 if not memcacheUserZero:
                     print("query from db")

@@ -198,7 +198,7 @@ while True:
             pst+='\n'+k
         pst = pst.replace("'","\\'")
         print(pst)
-        print("Exist till time:n")
+        print("Exist till hours:mins:seconds")
         exst = input()
         #exst = str(exst)
         data = {'query':'updateTill','name':username,'value':pst, 'time':str(exst).split(':')}
