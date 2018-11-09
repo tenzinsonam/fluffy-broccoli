@@ -229,8 +229,6 @@ while True:
                     time.sleep(0.001)
 
                 try:
-                    while(True):
-                        pass
                     print('update')
                     req_value = req['name'] + "#0"
                     print(req_value)
