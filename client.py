@@ -22,7 +22,7 @@ def getMessage(s):
     rawn = s.recv(10).decode('UTF-8')
     if(len(rawn)==0):
         return ""
-    print(rawn)
+    #print(rawn)
     return s.recv(int(rawn)).decode('UTF-8')
 
 s = socket.socket()
@@ -43,6 +43,7 @@ while True:
 user =""
 print('Enter your username')
 while True:
+
     username = input()
     if inp.lower() == 'n':
         data = {'query':'UserExists?','value':username,'createUserIfNotExists':True}
@@ -96,48 +97,83 @@ else:
     time2 = datetime.datetime.now()
 '''
 
-#print('''
-#    Command Rules
-#    search <username> <#ofPosts>
-#    update <enter>
-#        <Your Post>
-#    ''')
-print('Enter query type')
-que = input()
-if que == "search":
-    print('username to search')
-    nm = input()
-    print('number of posts')
-    postn = input()
-    data = {'query':'searchUser', 'name':nm, 'num':postn}
-    json_string = json.dumps(data)
-    #print(json_string)
-    s.sendall(setMessage((json_string).encode('UTF-8')))
-    rec = getMessage(s)
-    print(rec)
+print('''
+    Command Rules
+    -------------
+    search <username> <#ofPosts>
+    update <enter>
+           <Your Post>
+    deletme
+    exit
+    ''')
 
-elif que == "update":
-    print("write your post")
-    pst = input()
-    data = {'query':'updateUserinfo','name':username,'value':pst}
-    json_string = json.dumps(data)
-    #print(json_string)
-    s.sendall(setMessage((json_string).encode('UTF-8')))
-    rec = getMessage(s)
-    print(rec)
-    jrec = json.loads(rec)
-    if jrec['code']==1:
-        print(jrec['response'])
-    #print(rec)
+while True:
+    s.close()
+    #print('Enter query type')
+    que = input()
+    que = que.strip()
+    que = que.split(' ')
+    s = socket.socket()
+    s.connect((SERVER_IP, int(sys.argv[1])))
+
+    if que[0] == "search":
+        #print('username to search')
+        #nm = input()
+        if len(que)!=3:
+            print("Wrong # of Arguments !!!\n")
+            continue
+        nm = que[1]
+        #print('number of posts')
+        #postn = input()
+        postn = que[2]
+        data = {'query':'searchUser', 'name':nm, 'num':postn}
+        json_string = json.dumps(data)
+        #print(json_string)
+        s.sendall(setMessage((json_string).encode('UTF-8')))
+        rec = getMessage(s)
+        print(rec)
+
+    elif que[0] == "update":
+        print(que)
+        if len(que)!=1:
+            print("Wrong # of Arguments !!!\n")
+            continue
+        #print("write your post")
+        pst = input()
+        while True:
+            k = input()
+            if k=="":
+                break
+            pst+='\n'+k
+        pst = pst.replace("'","\\'")
+        print(pst)
+        data = {'query':'updateUserinfo','name':username,'value':pst}
+        json_string = json.dumps(data)
+        #print(json_string)
+        s.sendall(setMessage((json_string).encode('UTF-8')))
+        rec = getMessage(s)
+        print(rec)
+        jrec = json.loads(rec)
+        if jrec['code']==1:
+            print(jrec['response'])
+        #print(rec)
 
 
-elif que=="delete":
-    data = {'query':'deleteUser','name':username}
-    json_string = json.dumps(data)
-    s.sendall(setMessage((json_string).encode('UTF-8')))
-    rec = getMessage(s)
-    jrec = json.loads(rec)
-    if jrec['code']==1:
-        print(jrec['response'])
+    elif que[0] =="deleteme":
+        if len(que)!=1:
+            print("Wrong # of Arguments !!!\n")
+            continue
+        data = {'query':'deleteUser','name':username}
+        json_string = json.dumps(data)
+        s.sendall(setMessage((json_string).encode('UTF-8')))
+        rec = getMessage(s)
+        jrec = json.loads(rec)
+        if jrec['code']==1:
+            print(jrec['response'])
+    elif que[0]=='exit':
+        break
+    else:
+        print("Invalid Command")
 
-s.close()
+    print('\n')
+    s.close()
