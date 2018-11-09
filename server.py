@@ -4,6 +4,7 @@ import sys
 import _mysql
 import traceback
 import math
+import datetime
 from pymemcache.client import base
 from pymemcache.client.hash import HashClient
 import socket
@@ -104,7 +105,7 @@ while True:
                 if not num_str:
                     if debug:
                         print("query from db")
-                    conn.query("SELECT message FROM status WHERE userhash='" + req_value +"'")
+                    conn.query("SELECT * FROM status WHERE userhash='" + req_value +"'")
                     rows = conn.store_result().fetch_row(how=1,maxrows=0)
 
                     #TODO if the search user doesn't exist in the database
@@ -255,10 +256,28 @@ while True:
                         negativeDict[str(math.ceil(x/100))].append(str(x))
                         conn.query(qu)
                     memc.delete_many(deleteRangeExpanded)
-                    qu = "UPDATE status SET message='" +str(tweetnum-(deleteRange[1]-deleteRange[0]+1))+  "' WHERE userhash='" + userZero+"';"
-                    conn.query(qu)
-                    if memcacheUserZero:
-                        memc.set(userZero,str(tweetnum-(deleteRange[1]-deleteRange[0]+1)) , TTL)
+
+                    #update #0
+                    #TODO cehck if value of #0 goes out of range
+                    if tweetnum>=deleteRange[0] and tweetnum<=deleteRange[1]:
+                        inRange = math.ceil(tweetnum/100)
+                        tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                        while(len(tempList)==100):
+                            inRange-=1
+                            #if str(inRange)
+                            tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                        possibleValue = inRange*100
+                        for x in range(inRange*100, (inRange-1)*100, -1):
+                            if x not in tempList:
+                                possibleValue=x
+
+                        qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
+                        conn.query(qu)
+
+
+
+                        if memcacheUserZero:
+                            memc.set(userZero,str(possibleValue) , TTL)
                     for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
                         qu = "UPDATE status SET message='" + ",".join(negativeDict[str(x)])+"' WHERE userhash='" +userZero[:-1]+str(-1*x)+"';"
                         conn.query(qu)
@@ -279,18 +298,42 @@ while True:
                     negativeDict[str(math.ceil(deleteRow/100))].append(str(deleteRow))
                     qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(deleteRow) +"';"
                     conn.query(qu)
-                    qu = "UPDATE status SET message='" +str(tweetnum-(+1))+  "' WHERE userhash='" + userZero+"';"
-                    conn.query(qu)
-                    if memcacheUserZero:
-                        memc.set(userZero,str(tweetnum-(+1)) , TTL)
+
+                    if tweetnum==deleteRow:
+                        inRange = math.ceil(tweetnum/100)
+                        tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                        while(len(tempList)==100):
+                            inRange-=1
+                            i#f str(inRange)
+                            tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                        possibleValue = inRange*100
+                        for x in range(inRange*100, (inRange-1)*100, -1):
+                            if x not in tempList:
+                                possibleValue=x
+
+                        qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
+                        conn.query(qu)
+
+
+
+                        if memcacheUserZero:
+                            memc.set(userZero,str(possibleValue) , TTL)
+
+
                     qu = "UPDATE status SET message='" +",".join(negativeDict[str(math.ceil(deleteRow/100))]) +"' WHERE userhash='" +userZero[:-1] +str(-1*math.ceil(deleteRow/100))+"';"
                     conn.query(qu)
 
                 c.sendall(setMessage(json.dumps({'code':1, 'response':"User posts deleted"})).encode('UTF-8'))
 
+
             if req['query']=='updateTill':
                 userZero = req['name']+'#0'
-                newTTL = req['time']
+                #newTTL = req['time']
+                req_value = req['name'] + "#0"
+                timenow = datetime.datetime.now()
+                #deltaParam = "=".join()
+                #TODO chenge from only hours
+                newTTL = (timenow + datetime.timedelta(hours=int(req['time'][1]))).strftime("%Y-%m-%d %H:%M:%S")
                 memcacheUserZero = memc.get(userZero)
                 if not memcacheUserZero:
                     print("query from db")
@@ -308,6 +351,7 @@ while True:
                 conn.query(qu)
                 c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                 memc.set(userZero, tweets+1, newTTL)
+                print(datetime.datetime.now())
                 qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
                 conn.query(qu)
 

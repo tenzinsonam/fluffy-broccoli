@@ -198,9 +198,10 @@ while True:
             pst+='\n'+k
         pst = pst.replace("'","\\'")
         print(pst)
-        print("Exist till")
+        print("Exist till time:n")
         exst = input()
-        data = {'query':'updateUserinfo','name':username,'value':pst, 'time':exst}
+        #exst = str(exst)
+        data = {'query':'updateTill','name':username,'value':pst, 'time':str(exst).split(':')}
         json_string = json.dumps(data)
         #print(json_string)
         s.sendall(setMessage((json_string).encode('UTF-8')))
