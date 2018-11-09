@@ -70,32 +70,37 @@ while True:
             req = json.loads(req)
 
             if req['query']=='UserExists?':
-                req_value = req['value']+'#0'
-                popularfilms = memc.get(req_value)
-                if not popularfilms:
-                    print(req)
-                    qu = "SELECT userhash FROM status WHERE userhash='" + req_value +"'"
-                    conn.query(qu)
-                    rows = conn.store_result()
-                    rows = rows.fetch_row(how=1,maxrows=0)
-                    print(rows)
-                    if(len(rows)!=0):
-                        c.sendall(setMessage(json.dumps({'code':0,'response':'User Exists\n'})).encode('UTF-8'))
-                    elif 'createUserIfNotExists' in req.keys() and req['createUserIfNotExists'] == False:
-                        c.sendall(setMessage(json.dumps({'code':1,'response':'User doesn\'t Exists\n'})).encode('UTF-8'))
-                    else:
-                        memc.set(req_value,'0',TTL)
-                        qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req_value +"','0', -1)"
+                breakLoop = False 
+                while not breakLoop:
+                    req_value = req['value']+'#0'
+                    popularfilms, cas = memc.gets(req_value)
+                    if not popularfilms:
+                        print(req)
+                        qu = "SELECT userhash FROM status WHERE userhash='" + req_value +"'"
                         conn.query(qu)
-                        c.sendall(setMessage(json.dumps({'code':1,'response':'User Created Successfully'})).encode('UTF-8'))
-                   #print("Updated memcached with MySQL data")
-                else:
-                    print("Loaded data from memcached")
-                    c.sendall(setMessage(json.dumps({'code':0,'response':'User Exists\n'})).encode('UTF-8'))
-                #dont change req
-                # req = getMessage(c)
-                # print(req)
-                # req = json.loads(req)
+                        rows = conn.store_result()
+                        rows = rows.fetch_row(how=1,maxrows=0)
+                        print(rows)
+                        if(len(rows)!=0):
+                            c.sendall(setMessage(json.dumps({'code':0,'response':'User Exists\n'})).encode('UTF-8'))
+                        elif 'createUserIfNotExists' in req.keys() and req['createUserIfNotExists'] == False:
+                            c.sendall(setMessage(json.dumps({'code':1,'response':'User doesn\'t Exists\n'})).encode('UTF-8'))
+                        else:
+                            #memc.set(req_value,'0',TTL)
+                            if not memc.cas(req_value,'0',cas,expire=TTL):
+                                continue
+                            qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req_value +"','0', -1)"
+                            conn.query(qu)
+                            c.sendall(setMessage(json.dumps({'code':1,'response':'User Created Successfully'})).encode('UTF-8'))
+                       #print("Updated memcached with MySQL data")
+                    else:
+                        print("Loaded data from memcached")
+                        c.sendall(setMessage(json.dumps({'code':0,'response':'User Exists\n'})).encode('UTF-8'))
+                    breakLoop = True
+                    #dont change req
+                    # req = getMessage(c)
+                    # print(req)
+                    # req = json.loads(req)
 
             if req['query']=='searchUser':
                 print("art thou in search")

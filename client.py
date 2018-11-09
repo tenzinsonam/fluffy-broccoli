@@ -23,7 +23,9 @@ def getMessage(s):
     if(len(rawn)==0):
         return ""
     #print(rawn)
-    return s.recv(int(rawn)).decode('UTF-8')
+    res =  s.recv(int(rawn)).decode('UTF-8')
+    print(res)
+    return res
 
 s = socket.socket()
 s.connect((SERVER_IP, int(sys.argv[1])))
@@ -198,7 +200,7 @@ while True:
             pst+='\n'+k
         pst = pst.replace("'","\\'")
         print(pst)
-        print("Exist till")
+        print("Exist till (in minutes)")
         exst = input()
         data = {'query':'updateUserinfo','name':username,'value':pst, 'time':exst}
         json_string = json.dumps(data)
