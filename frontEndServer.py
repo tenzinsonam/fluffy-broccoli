@@ -66,7 +66,7 @@ while True:
                 message = getMessage(s_handlingnode)
                 s_handlingnode.close()
                 c.sendall(setMessage(message))
-            elif req['query'] in ['searchUser']: 
+            elif req['query'] in ['searchUser']:
                 req_value = req['value']+'#0'
                 handlingnode = node[hash(req_value)%N]
                 s_handlingnode = socket.socket()
@@ -85,7 +85,7 @@ while True:
                     c_common, addr_common = s_common.accept()
                     response = getMessage(c_common)
                     if 'queryResponse' in response.keys() and response['queryResponse']=='searchUserAndExpand':
-                       maxcount = response['totalNumResponses'] 
+                       maxcount = response['totalNumResponses']
                     concatenatedMessage += response['message']
                     count+=['numResponse']
                     if maxcount==count:
