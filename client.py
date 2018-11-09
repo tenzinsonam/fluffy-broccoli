@@ -184,6 +184,34 @@ while True:
         if jrec['code']==1:
             print(jrec['response'])
 
+    elif que[0]=='updateTill':
+        print(que)
+        if len(que)!=1:
+            print("Wrong # of Arguments !!!\n")
+            continue
+        #print("write your post")
+        pst = input()
+        while True:
+            k = input()
+            if k=="":
+                break
+            pst+='\n'+k
+        pst = pst.replace("'","\\'")
+        print(pst)
+        print("Exist till")
+        exst = input()
+        data = {'query':'updateUserinfo','name':username,'value':pst, 'time':exst}
+        json_string = json.dumps(data)
+        #print(json_string)
+        s.sendall(setMessage((json_string).encode('UTF-8')))
+        rec = getMessage(s)
+        print(rec)
+        jrec = json.loads(rec)
+        if jrec['code']==1:
+            print(jrec['response'])
+        #print(rec)
+
+
 
 
     elif que[0]=='exit':
