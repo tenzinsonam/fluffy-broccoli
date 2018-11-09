@@ -170,10 +170,28 @@ while True:
         jrec = json.loads(rec)
         if jrec['code']==1:
             print(jrec['response'])
+
+    elif que[0]=='deletei':
+        if len(que)!=2:
+            print("Wrong number of arguments !!!\n")
+            continue
+        deleteRange=que[1]
+        data = {'query':'deletePosts', 'name':username, 'value':str(deleteRange)}
+        json_string = json.dumps(data)
+        s.sendall(setMessage((json_string).encode('UTF-8')))
+        rec = getMessage(s)
+        jrec = json.loads(rec)
+        if jrec['code']==1:
+            print(jrec['response'])
+
+
+
     elif que[0]=='exit':
         break
     else:
         print("Invalid Command")
+
+
 
     print('\n')
     s.close()

@@ -3,6 +3,7 @@ import os
 import sys
 import _mysql
 import traceback
+import math
 from pymemcache.client import base
 from pymemcache.client.hash import HashClient
 import socket
@@ -194,7 +195,7 @@ while True:
                 userZero = req['name'] +'#0'
                 memcacheUserZero = memc.get(userZero)
                 if memcacheUserZero:
-                    memc.set(userZero, -1*memcacheUserZero, TTL)
+                    memc.set(userZero, -1*int((memcacheUserZero).decode('UTF-8')), TTL)
                 print("query from db")
                 qu = "SELECT * FROM status WHERE userhash='" + userZero +"';"
                 conn.query(qu)
@@ -218,6 +219,73 @@ while True:
                         memc.set()
 
                 '''
+
+
+            #TODO tricky #0 updates
+            if req['query']=='deletePosts':
+                userZero = req['name']+'#0'
+                memcacheUserZero = memc.get(userZero)   #used later
+                print('query from db')
+                qu = "SELECT * FROM status WHERE userhash='" +userZero+"';"
+                conn.query(qu)
+                rows = conn.store_result();
+                rows = rows.fetch_row(how=1, maxrows=0)
+                tweetnum = int((rows[0]['message']).decode('UTF-8'))
+                if req['value'].find('-')!=-1:
+                    deleteRange = req['value'].split('-')
+                    deleteRange = [int(x) for x in deleteRange]
+                    negativeDict = {}
+                    for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
+                        negativeDict[str(x)] = []
+                        qu = "SELECT * FROM status WHERE userhash='" + userZero[:-1] +str(-1*x)+"';"
+                        conn.query(qu)
+                        rows = conn.store_result()
+                        rows = rows.fetch_row(how=1, maxrows=0)
+                        if(len(rows)==0):
+                            qu = "INSERT INTO status (userhash, message) VALUES ('" + userZero[:-1]+str(-1*x) +"','');"
+                            conn.query(qu)
+                        else:
+                            negativeDict[str(x)].append(rows[0]['message'].decode('UTF-8'))
+
+                    deleteRangeExpanded = []
+                    for x in range(deleteRange[0], deleteRange[1]+1):
+                        deleteRangeExpanded.append(str(x))
+                        qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(x) +"';"
+                        negativeDict[str(math.ceil(x/100))].append(str(x))
+                        conn.query(qu)
+                    memc.delete_many(deleteRangeExpanded)
+                    qu = "UPDATE status SET message='" +str(tweetnum-(deleteRange[1]-deleteRange[0]+1))+  "' WHERE userhash='" + userZero+"';"
+                    conn.query(qu)
+                    if memcacheUserZero:
+                        memc.set(userZero,str(tweetnum-(deleteRange[1]-deleteRange[0]+1)) , TTL)
+                    for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
+                        qu = "UPDATE status SET message='" + ",".join(negativeDict[str(x)])+"' WHERE userhash='" +userZero[:-1]+str(-1*x)+"';"
+                        conn.query(qu)
+
+                else:
+                    deleteRow = int(req['value'])
+                    negativeDict = {}
+                    qu = "SELECT * FROM status WHERE userhash='" + userZero[:-1] +str(-1*math.ceil(deleteRow/100))+"';"
+                    negativeDict[str(math.ceil(deleteRow/100))] = []
+                    conn.query(qu)
+                    rows = conn.store_result()
+                    rows = rows.fetch_row(how=1, maxrows=0)
+                    if(len(rows)==0):
+                        qu = "INSERT INTO status (userhash, message) VALUES ('" + userZero[:-1] +str(-1*math.ceil(deleteRow/100)) +"','');"
+                        conn.query(qu)
+                    else:
+                        negativeDict[str(math.ceil(deleteRow/100))].append(rows[0]['message'].decode('UTF-8'))
+                    negativeDict[str(math.ceil(deleteRow/100))].append(str(deleteRow))
+                    qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(deleteRow) +"';"
+                    conn.query(qu)
+                    qu = "UPDATE status SET message='" +str(tweetnum-(+1))+  "' WHERE userhash='" + userZero+"';"
+                    conn.query(qu)
+                    if memcacheUserZero:
+                        memc.set(userZero,str(tweetnum-(+1)) , TTL)
+                    qu = "UPDATE status SET message='" +",".join(negativeDict[str(math.ceil(deleteRow/100))]) +"' WHERE userhash='" +userZero[:-1] +str(-1*math.ceil(deleteRow/100))+"';"
+                    conn.query(qu)
+
+                c.sendall(setMessage(json.dumps({'code':1, 'response':"User posts deleted"})).encode('UTF-8'))
 
 
 
