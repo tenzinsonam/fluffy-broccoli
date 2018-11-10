@@ -236,7 +236,7 @@ while True:
                 print("tweets: " + str(tweets))
                 qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
                 conn.query(qu)
-                memc
+                setLatest(memc, req['name']+"#"+str(tweets+1)+":"+(datetime().datetime().now()).strftime("%Y-%m-%d %H:%M:%S"))
                 c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                 memc.set(req_value, tweets+1, TTL)
                 qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
@@ -406,6 +406,7 @@ while True:
                 tweets = int(memcacheUserZero.decode('UTF-8'))
                 qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"','" +str(newTTL)+"');"
                 conn.query(qu)
+                setLatest(memc, req['name']+"#"+str(tweets+1)+":"+(datetime().datetime().now()).strftime("%Y-%m-%d %H:%M:%S"))
                 c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                 memc.set(userZero, tweets+1, newTTL)
                 print(datetime.datetime.now())
