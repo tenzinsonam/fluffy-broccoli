@@ -154,13 +154,13 @@ while True:
     if not os.fork():
         s.close()
         try:
+            memc = getmemc()
             conn = createDatabaseConn()
             conn2 = createDatabaseConn2()
             req = getMessage(c)
             print(req)
             req = json.loads(req)
 
-            memc = getmemc()
 
             if req['query']=='UserExists?':
                 breakLoop = False
@@ -200,6 +200,8 @@ while True:
                     # req = json.loads(req)
 
             if req['query']=='searchUser':
+                while not attemptLock(conn,memc,req['name']):
+                    time.sleep(0.001)
 
                 print("art thou in search")
                 req_value = req['name'] + "#0"
@@ -241,11 +243,7 @@ while True:
                 #check it brotha
                 user_posts = memc.get_many(user_postno)
 
-                print(user_posts)
-                missed_posts = []
-                for key in user_postno:
-                    if key not in user_posts.keys():
-                        missed_posts.append(key)
+                        #TODO if the search user doesn't exist in the database
 
                 print('Missed posts ->' +str(missed_posts))
                 if len(missed_posts)>0:
@@ -263,14 +261,89 @@ while True:
                         user_posts[row['userhash']] = row['message']
                     memc.set_many(temp_keyvalue)
 
+                    if(debug):
+                        print(tweets)
+                        print(int(req['num']))
 
-                retstr = ""
-                for key,value in user_posts.items():
-                    retstr += str(key) + " --> " + str(value.decode('UTF-8'))+"\n"
-                print(retstr)
-                if(debug):
+                    user_postno = []
+                    if 'post_nos' in req.keys():
+                        for i in req['post_nos']:
+                            user_postno.append(req['name']+'#'+str(i))
+                    else:
+
+                        requested_numposts = int(req['num'])
+
+                        while tweets > 0 and requested_numposts > 0:
+                            del_list = []
+                            deleted = req['name']+'#-'+ (int((tweets-1)/100)+1)
+                            del_postnos = memc.get(deleted)
+                            if not del_postnos:
+                                qu = "SELECT userhash FROM status WHERE userhash='" + deleted +"'"
+                                conn.query(qu)
+                                rows = conn.store_result()
+                                rows = rows.fetch_row(how=1,maxrows=0)
+                                if len(rows)==0:
+                                    ## No rows for that range is deleted
+                                    del_postnos=""
+                                    pass
+                                else:
+                                    del_postnos = rows[0]
+                            del_postnos = del_postnos.split(',')
+                            for i in del_postnos:
+                                try:
+                                    del_list.append(int(i))
+                                except:
+                                    continue
+
+
+                            while tweets >= 1 and requested_numposts >= 1:
+                                user_postno.append(req['name']+'#'+str(tweets))
+                                tweets -=1
+                                requested_numposts -=1
+                                if tweets%100 ==0:
+                                    break
+
+                    #check it brotha
+                    user_posts = memc.get_many(user_postno)
+
+                    print(user_posts)
+                    missed_posts = []
+                    for key in user_postno:
+                        if key not in user_posts.keys():
+                            missed_posts.append(key)
+
+                    print('Missed posts ->' +str(missed_posts))
+                    if len(missed_posts)>0:
+                        db_req_keys = "'"+str(missed_posts[0])+"'"
+                        for i in range(1,len(missed_posts)):
+                            db_req_keys += ","+"'"+str(missed_posts[i])+"'"
+                        db_req_keys = "("+db_req_keys+")"
+                        conn.query("SELECT userhash,message FROM status WHERE userhash in " +db_req_keys +"")
+                        rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                        temp_keyvalue = {}
+                        for row in rows:
+                            print(row)
+                            #TODO: check for xpiry
+                            temp_keyvalue[row['userhash']] = row['message']
+                            user_posts[row['userhash']] = row['message']
+                        memc.set_many(temp_keyvalue)
+
+
+                    retstr = ""
+                    for key,value in user_posts.items():
+                        retstr += str(key) + " --> " + str(value.decode('UTF-8'))+"\n"
                     print(retstr)
-                c.sendall(setMessage((retstr).encode('UTF-8')))
+                    if(debug):
+                        print(retstr)
+                    c.sendall(setMessage((retstr).encode('UTF-8')))
+
+                except Exception as e:
+                    print(traceback.format_exc())
+                    print(sys.exc_info()[0])
+                finally:
+                    releaseLock(conn,memc,req['name'])
+
+
 
             if req['query']=='updateUserinfo':
                 while not attemptLock(conn,memc,req['name']):
@@ -354,6 +427,8 @@ while True:
                     print(traceback.format_exc())
                     print(sys.exc_info()[0])
                 finally:
+                    # TODO
+                    # I'm deleting USER FROM database, how do I release the lock
                     releaseLock(conn,memc,req['name'])
 
 
@@ -517,6 +592,7 @@ while True:
                 try:
 
                     userZero = req['name']+'#0'
+                    #TODO if userZero.value < 0 return False
                     #newTTL = req['time']
                     req_value = req['name'] + "#0"
                     timenow = datetime.datetime.now()
@@ -607,6 +683,99 @@ while True:
                             responseString+= x[0] + "---->" +x[1] +"\n"
 
                 '''
+
+
+            ## Query types sent to be handled by frontEndServer
+
+            if req['query'] =='searchUserAndExpand':
+                print(req)
+                print('Query received successfully')
+
+                print("art thou in search")
+                req_value = req['name'] + "#0"
+                num_str = (memc.get(req_value))
+                if not num_str:
+                    if debug:
+                        print("query from db")
+                    conn.query("SELECT * FROM status WHERE userhash='" + req_value +"'")
+                    rows = conn.store_result().fetch_row(how=1,maxrows=0)
+
+                    #TODO if the search user doesn't exist in the database
+
+                    #TODO
+                    # Set the TTL appropriately
+                    memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
+                    num_str = rows[0]['message']
+                else:
+                    if(debug):
+                        print("query from memc")
+                tweets = int(num_str.decode('UTF-8'))
+                retstr = ""
+
+                if(debug):
+                    print(tweets)
+                    print(int(req['num']))
+
+                user_postno = []
+
+                ini = int(req['ini'])
+                nodes = req['nodes']
+                N = len(nodes)
+
+                tasks = {}
+                for i in range(0,N):
+                    if i == ini:
+                        continue
+
+                #TODO Complete this
+                raise NotImplementedError;
+
+                """
+                if 'post_nos' in req.keys():
+                    for i in req['post_nos']:
+                        user_postno.append(req['name']+'#'+str(i))
+                else:
+                    requested_numposts = int(req['num'])
+                    while tweets >= 1 and requested_numposts >= 1:
+                        user_postno.append(req['name']+'#'+str(tweets))
+                        tweets -=1
+                        requested_numposts -=1
+                """
+
+                #check it brotha
+                user_posts = memc.get_many(user_postno)
+
+                print(user_posts)
+                missed_posts = []
+                for key in user_postno:
+                    if key not in user_posts.keys():
+                        missed_posts.append(key)
+
+                print('Missed posts ->' +str(missed_posts))
+                if len(missed_posts)>0:
+                    db_req_keys = "'"+str(missed_posts[0])+"'"
+                    for i in range(1,len(missed_posts)):
+                        db_req_keys += ","+"'"+str(missed_posts[i])+"'"
+                    db_req_keys = "("+db_req_keys+")"
+                    conn.query("SELECT userhash,message FROM status WHERE userhash in " +db_req_keys +"")
+                    rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                    temp_keyvalue = {}
+                    for row in rows:
+                        print(row)
+                        #TODO: check for xpiry
+                        temp_keyvalue[row['userhash']] = row['message']
+                        user_posts[row['userhash']] = row['message']
+                    memc.set_many(temp_keyvalue)
+
+
+                retstr = ""
+                for key,value in user_posts.items():
+                    retstr += str(key) + " --> " + str(value.decode('UTF-8'))+"\n"
+                print(retstr)
+                if(debug):
+                    print(retstr)
+                c.sendall(setMessage((retstr).encode('UTF-8')))
+
 
 
 
