@@ -24,7 +24,7 @@ def getMessage(s):
         return ""
     #print(rawn)
     res =  s.recv(int(rawn)).decode('UTF-8')
-    print(res)
+    #print(res)
     return res
 
 s = socket.socket()
