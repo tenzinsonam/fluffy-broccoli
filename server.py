@@ -32,18 +32,62 @@ def getMessage(s):
 
 def createDatabaseConn():
     conn = _mysql.connect (host = "localhost",
-                            user = "user",
-                            passwd = "password",
+                            user = "tenzin",
+                            passwd = "tenzin",
                             db = "cs632")
     return conn
 
+def createDatabaseConn2():
+    conn2 = _mysql.connect (host = "localhost",
+                            user = "tenzin",
+                            passwd = "tenzin",
+                            db = "cs632")
+    return conn2
+
+#userLock = {}
+#username is the key
+#the function will return false if currently resource is locked
+#so place it in while loop
+#input conn2
+def  addMemcache(username, conn, memc):
+    #userLock[username] = "free"
+    while not memc.add(username, free,999999):
+        pass
+    qu = "SELECT * FROM lockingDict WHERE userhash='" +username+ "';"
+    conn.query(qu)
+    rows = conn.store_result()
+    rows = rows.fetch_row(how=1, maxrows=0)
+    if(len(rows)==0):
+        qu = "INSERT INTO lockingDict (userhash, lock) VALUES ('" +username+"', lock);"
+        conn.query(qu)
+    else:
+        lockStatus = rows[0]['lock']
+        if(lockStatus==lock):
+            return False
+        qu = "UPDATE lockingDict SET lock='lock' WHERE userhash='" +username+ "';"
+        conn.query(qu)
+    return True
+    #return conn
+
+def delMemcache(username, conn, memc):
+    memc.delete(username)
+    qu = "UPDATE lockingDict SET lock='free' WHERE userhash='" +username+ "';"
+    conn.query(qu)
+
+def setLatest(memcLatest, message, timeString):
+    if not (memcLatest.get("Latest")):
+        memcLatest.add("latest#"+timeString, message, 20)
+    else:
+        memcLatest.append("latest#"+timeString, "^^^^"+message, 20)
+
+
 #<<<<<<< HEAD
 
-def getmemc(): 
+def getmemc():
     return base.Client(('127.0.0.1',11211));
 
 def attemptLock(conn,memc,username):
-    response,cas = memc.gets('#status:'+username+':1') # response denotes if the lock exists
+    response = memc.get('#status:'+username+':1') # response denotes if the lock exists
     if response is None:
         print('Lock not found in memcached')
         ar = conn.query('update locks set status=1 where user="'+str(username)+'" and status=0;')
@@ -56,12 +100,12 @@ def attemptLock(conn,memc,username):
             if memc.add('#status:'+username+':1',1):
                 return True
             else:
-                print("Something conflicted with cache, lockattempt back-offed") 
+                print("Something conflicted with cache, lockattempt back-offed")
                 conn.query('update locks set status=0 where user="'+str(username)+'" and status=1;')
-                return False 
+                return False
     else:
-        print('Lock in memcached') 
-        return False 
+        print('Lock in memcached')
+        return False
     '''
     elif int(response)==1:
         return False
@@ -70,20 +114,20 @@ def attemptLock(conn,memc,username):
     '''
 
 def releaseLock(conn,memc,username):
-    response,cas = memc.gets('#status:'+username+':1')
+    response = memc.get('#status:'+username+':1')
     if response is None:
         ## Lock entry got evicted from Memcached
         pass
     else:
         memc.delete('#status:'+username+':1')
     conn.query('update locks set status=0 where user="'+str(username)+'";')
-     
-            
+
+
 
 #                        conn.query(qu)
 #                        rows = conn.store_result()
 #                        rows = rows.fetch_row(how=1,maxrows=0)
- 
+
 
 #=======
 #>>>>>>> ea7ac77db1c76406e0b416437f795312c42342cd
@@ -98,6 +142,7 @@ memc = HashClient(
 
 
 s = socket.socket()
+#memcLatest.add("Latest", "", 20)
 s.bind(('', int(sys.argv[1])))
 s.listen(5)
 
@@ -110,13 +155,14 @@ while True:
         try:
             memc = getmemc()
             conn = createDatabaseConn()
+            conn2 = createDatabaseConn2()
             req = getMessage(c)
             print(req)
             req = json.loads(req)
 
 
             if req['query']=='UserExists?':
-                breakLoop = False 
+                breakLoop = False
                 while not breakLoop:
                     req_value = req['value']+'#0'
                     popularfilms, cas = memc.gets(req_value)
@@ -156,28 +202,63 @@ while True:
                 while not attemptLock(conn,memc,req['name']):
                     time.sleep(0.001)
 
-                try:
-     
-                    print("art thou in search")
-                    req_value = req['name'] + "#0"
-                    num_str = (memc.get(req_value))
-                    if not num_str:
-                        if debug:
-                            print("query from db")
-                        conn.query("SELECT * FROM status WHERE userhash='" + req_value +"'")
-                        rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                print("art thou in search")
+                req_value = req['name'] + "#0"
+                num_str = (memc.get(req_value))
+                if not num_str:
+                    if debug:
+                        print("query from db")
+                    conn.query("SELECT * FROM status WHERE userhash='" + req_value +"'")
+                    rows = conn.store_result().fetch_row(how=1,maxrows=0)
+
+                    #TODO if the search user doesn't exist in the database
+
+                    #TODO
+                    # Set the TTL appropriately
+                    memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
+                    num_str = rows[0]['message']
+                else:
+                    if(debug):
+                        print("query from memc")
+                tweets = int(num_str.decode('UTF-8'))
+                retstr = ""
+
+                if(debug):
+                    print(tweets)
+                    print(int(req['num']))
+
+                user_postno = []
+                if 'post_nos' in req.keys():
+                    for i in req['post_nos']:
+                        user_postno.append(req['name']+'#'+str(i))
+                else:
+                    requested_numposts = int(req['num'])
+
+                    while tweets >= 1 and requested_numposts >= 1:
+                        user_postno.append(req['name']+'#'+str(tweets))
+                        tweets -=1
+                        requested_numposts -=1
+
+                #check it brotha
+                user_posts = memc.get_many(user_postno)
 
                         #TODO if the search user doesn't exist in the database
 
-                        #TODO
-                        # Set the TTL appropriately
-                        memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
-                        num_str = rows[0]['message']
-                    else:
-                        if(debug):
-                            print("query from memc")
-                    tweets = int(num_str.decode('UTF-8'))
-                    retstr = ""
+                print('Missed posts ->' +str(missed_posts))
+                if len(missed_posts)>0:
+                    db_req_keys = "'"+str(missed_posts[0])+"'"
+                    for i in range(1,len(missed_posts)):
+                        db_req_keys += ","+"'"+str(missed_posts[i])+"'"
+                    db_req_keys = "("+db_req_keys+")"
+                    conn.query("SELECT * FROM status WHERE userhash in " +db_req_keys +"")
+                    rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                    temp_keyvalue = {}
+                    for row in rows:
+                        print(row)
+                        #TODO: check for xpiry
+                        temp_keyvalue[row['userhash']] = row['message']
+                        user_posts[row['userhash']] = row['message']
+                    memc.set_many(temp_keyvalue)
 
                     if(debug):
                         print(tweets)
@@ -188,7 +269,7 @@ while True:
                         for i in req['post_nos']:
                             user_postno.append(req['name']+'#'+str(i))
                     else:
-                        
+
                         requested_numposts = int(req['num'])
 
                         while tweets > 0 and requested_numposts > 0:
@@ -213,7 +294,7 @@ while True:
                                 except:
                                     continue
 
-         
+
                             while tweets >= 1 and requested_numposts >= 1:
                                 user_postno.append(req['name']+'#'+str(tweets))
                                 tweets -=1
@@ -254,14 +335,14 @@ while True:
                     if(debug):
                         print(retstr)
                     c.sendall(setMessage((retstr).encode('UTF-8')))
- 
+
                 except Exception as e:
                     print(traceback.format_exc())
                     print(sys.exc_info()[0])
                 finally:
                     releaseLock(conn,memc,req['name'])
 
-               
+
 
             if req['query']=='updateUserinfo':
                 while not attemptLock(conn,memc,req['name']):
@@ -287,6 +368,7 @@ while True:
                     print("tweets: " + str(tweets))
                     qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
                     conn.query(qu)
+                    setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
                     c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                     memc.set(req_value, tweets+1, TTL)
                     qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
@@ -349,7 +431,7 @@ while True:
                     time.sleep(0.001)
 
                 try:
-     
+
                     userZero = req['name']+'#0'
                     memcacheUserZero = memc.get(userZero)   #used later
                     print('query from db')
@@ -393,8 +475,9 @@ while True:
                                 tempList = (",".join(negativeDict[str(inRange)])).split(',')
                             possibleValue = inRange*100
                             for x in range(inRange*100, (inRange-1)*100, -1):
-                                if x not in tempList:
+                                if str(x) not in tempList and x <tweetnum:
                                     possibleValue=x
+                                    break
 
                             qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
                             conn.query(qu)
@@ -429,12 +512,13 @@ while True:
                             tempList = (",".join(negativeDict[str(inRange)])).split(',')
                             while(len(tempList)==100):
                                 inRange-=1
-                                i#f str(inRange)
+                                #i#f str(inRange)
                                 tempList = (",".join(negativeDict[str(inRange)])).split(',')
                             possibleValue = inRange*100
                             for x in range(inRange*100, (inRange-1)*100, -1):
-                                if x not in tempList:
+                                if str(x) not in tempList and x < tweetnum:
                                     possibleValue=x
+                                    break
 
                             qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
                             conn.query(qu)
@@ -463,7 +547,7 @@ while True:
                     time.sleep(0.001)
 
                 try:
- 
+
                     userZero = req['name']+'#0'
                     #TODO if userZero.value < 0 return False
                     #newTTL = req['time']
@@ -472,7 +556,7 @@ while True:
                     #deltaParam = "=".join()
                     deltaParam =[int(req['time'][2]),int(req['time'][1]),int(req['time'][0]),0]
                     print(deltaParam)
-                    newTTL = (timenow + datetime.timedelta(hours=deltaParam[0], minutes=deltaParam[1], seconds=deltaParam[2])).strftime("%Y-%m-%d %H:%M:%S")
+                    newTTL = (timenow + datetime.timedelta(hours=deltaParam[0], minutes=deltaParam[1], seconds=deltaParam[2])).strftime("%Y-%m-%d-%H:%M:%S")
                     memcacheUserZero = memc.get(userZero)
                     if not memcacheUserZero:
                         print("query from db")
@@ -488,6 +572,7 @@ while True:
                     tweets = int(memcacheUserZero.decode('UTF-8'))
                     qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"','" +str(newTTL)+"');"
                     conn.query(qu)
+                    setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
                     c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                     memc.set(userZero, tweets+1, newTTL)
                     print(datetime.datetime.now())
@@ -499,6 +584,57 @@ while True:
                     print(sys.exc_info()[0])
                 finally:
                     releaseLock(conn,memc,req['name'])
+
+                    #TODO changes in latestString append mechanism
+            if req['query']=="getlatest":
+                timeNow = datetime.datetime.now()
+                timeList = []
+                for x in range(21):
+                    timeCheck = (timeNow - datetime.timedelta(seconds=x)).strftime("%Y-%m-%d_%H:%M:%S")
+                    userValue = memc.get("latest#"+str(timeCheck))
+                    if userValue:
+                        timeList.append(userValue.decode("UTF-8"))
+                responseString=""
+                for x in timeList:
+                    x = x.split("^^^^")
+                    for userHash in x:
+                        num_str = (memc.get(userHash))
+                        if not num_str:
+                            conn.query("SELECT * FROM status WHERE userhash='" + userHash +"'")
+                            rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                            memc.set(userHash, (rows[0]['message']).decode('UTF-8'), TTL)
+                            num_str = rows[0]['message']
+                        messAge = num_str.decode("UTF-8")
+                        responseString += userHash + "---->" + messAge +"\n"
+                if responseString!="":
+                    c.sendall(setMessage(json.dumps({'code':1,'response':responseString})).encode('UTF-8'))
+                else:
+                    c.sendall(setMessage(json.dumps({'code':1,'response':'No latest messages present'})).encode('UTF-8'))
+
+                '''
+                latestString = memc.get("Latest")
+                if not latestString:
+                    c.sendall(setMessage(json.dumps({'code':1,'response':'No latest messages present'})).encode('UTF-8'))
+                else:
+                    latestString = latestString.decode('UTF-8')
+                    latestString = latestString.split("^^^^")
+                    responseString=""
+                    if len(latestString) >= 20:
+                        itemsAppended=0
+                        for x in reversed(latestString):
+                            if itemsAppended==20:
+                                break
+                            x = x.split(":")
+                            #if()
+                            responseString+= x[0] + "---->" +x[1] +"\n"
+                            itemsAppended+=1
+                    elif len(latestString) < 20:
+                        for x in reversed(latestString):
+                            x = x.split(":")
+                            #if()
+                            responseString+= x[0] + "---->" +x[1] +"\n"
+
+                '''
 
 
             ## Query types sent to be handled by frontEndServer
@@ -592,7 +728,7 @@ while True:
                     print(retstr)
                 c.sendall(setMessage((retstr).encode('UTF-8')))
 
- 
+
 
 
 
