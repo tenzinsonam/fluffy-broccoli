@@ -11,7 +11,7 @@ PORT = 24001
 TTL = 600
 
 # nodes must contain different ips
-nodes = [{'ip':'127.0.0.1','port':24002}]
+nodes = [{'ip':'127.0.0.1','port':12345}]
 N = len(nodes)
 
 def setMessage(inp):
@@ -43,8 +43,8 @@ memc = HashClient(
 #                        db = "cs632")
 
 s = socket.socket()
-s.bind(('', PORT))
-s.listen(5)
+s.bind(('', int(sys.argv[1])))
+s.listen(500)
 
 # Request to be processed
 while True:
@@ -57,18 +57,23 @@ while True:
             print(req)
             req = json.loads(req)
 
-            if req['query'] in ['UserExists?','updateUserinfo']:
+            if req['query'] in ['UserExists?']:
                 req_value = req['value']+'#0'
                 handlingnode = nodes[hash(req_value)%N]
                 s_handlingnode = socket.socket()
                 s_handlingnode.connect((handlingnode['ip'],handlingnode['port']))
-                s_handlingnode.sendall(setMessage((req).encode('UTF-8')))
+                s_handlingnode.sendall(setMessage((json.dumps(req)).encode('UTF-8')))
                 message = getMessage(s_handlingnode)
                 s_handlingnode.close()
-                c.sendall(setMessage(message))
+                c.sendall(setMessage(message).encode('UTF-8'))
+            elif req['query'] in ['updateUserinfo']:
+                #TODO
+                print("Handle this")
+
             elif req['query'] in ['searchUser']:
-                req_value = req['value']+'#0'
-                handlingnode = node[hash(req_value)%N]
+                req_value = req['name']+'#0'
+                intended_node_index = hash(req_value)%N
+                handlingnode = nodes[intended_node_index]
                 s_handlingnode = socket.socket()
                 s_handlingnode.connect((handlingnode['ip'],handlingnode['port']))
 
@@ -76,7 +81,10 @@ while True:
                 s_common.bind(('',0))
                 s_common.listen(N)
 
-                newquery = {'query':'searchUserAndExpand','value':req['value'],'nodes':nodes,'port':s_common.getsockname()[1]}
+                newquery = {'query':'searchUserAndExpand','name':req['name'],'nodes':nodes,'ini':intended_node_index,'port':s_common.getsockname()[1],'num':req['num']}
+                s_handlingnode.sendall(setMessage(json.dumps(newquery).encode('UTF-8')))
+                s_handlingnode.close()
+
 
                 count = 0 #for number of messages
                 maxcount = -1
