@@ -145,7 +145,8 @@ s = socket.socket()
 #memcLatest.add("Latest", "", 20)
 s.bind(('', int(sys.argv[1])))
 s.listen(5)
-
+memc = getmemc()
+memc.flush_all()
 # Request to be processed
 while True:
 
@@ -292,9 +293,13 @@ while True:
                     else:
                         print("query from memc")
                     tweets = int((memc.get(req_value)).decode('UTF-8'))
+                    if tweets < 0:
+                        c.sendall(setMessage(json.dumps({'code':1,'response':'Update Failed'})).encode('UTF-8'))
+                        break
                     print("tweets: " + str(tweets))
                     qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
                     conn.query(qu)
+                    memc.set(req['name']+"#"+str(tweets+1), req['value'])
                     setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
                     c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                     memc.set(req_value, tweets+1, TTL)
@@ -302,6 +307,7 @@ while True:
                     conn.query(qu)
 
                 except Exception as e:
+                    #if e != "":
                     print(traceback.format_exc())
                     print(sys.exc_info()[0])
                 finally:
@@ -330,6 +336,8 @@ while True:
                     qu = "DELETE FROM status WHERE userhash LIKE '" + userZero[:-1] + "%';"
                     qu = "DELETE FROM locks WHERE user = '"+req['name']+"';"
                     conn.query(qu)
+                    if memcacheUserZero:
+                        memc.delete(userZero)
 
                     '''
                     elif reqnxt['query']=='deleteComm':
@@ -350,7 +358,6 @@ while True:
 
 
 
-            #TODO tricky #0 updates
             if req['query']=='deletePosts':
                 while not attemptLock(conn,memc,req['name']):
                     time.sleep(0.001)
@@ -379,13 +386,16 @@ while True:
                                 qu = "INSERT INTO status (userhash, message, expires) VALUES ('" + userZero[:-1]+str(-1*x) +"','',-1);"
                                 conn.query(qu)
                             else:
-                                negativeDict[str(x)].append(rows[0]['message'].decode('UTF-8'))
+                                negativeDict[str(x)].append((rows[0]['message'].decode('UTF-8')).strip())
 
                         deleteRangeExpanded = []
                         for x in range(deleteRange[0], deleteRange[1]+1):
                             deleteRangeExpanded.append(str(x))
                             qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(x) +"';"
                             negativeDict[str(math.ceil(x/100))].append(str(x))
+                            tempList = (",".join(negativeDict[str(math.ceil(x/100))])).split(',')
+                            tempList = list(set(tempList))
+                            negativeDict[str(math.ceil(x/100))] = tempList
                             conn.query(qu)
                         memc.delete_many(deleteRangeExpanded)
 
@@ -393,11 +403,13 @@ while True:
                         #TODO cehck if value of #0 goes out of range
                         if tweetnum>=deleteRange[0] and tweetnum<=deleteRange[1]:
                             inRange = math.ceil(tweetnum/100)
-                            tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                            tempList = negativeDict[str(inRange)]
+                            #tempList = list(set(tempList))
                             while(len(tempList)==100):
                                 inRange-=1
                                 #if str(inRange)
-                                tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                                tempList = negativeDict[str(inRange)]
+                                #tempList = list(set(tempList))
                             possibleValue = inRange*100
                             for x in range(inRange*100, (inRange-1)*100, -1):
                                 if str(x) not in tempList and x <tweetnum:
@@ -407,13 +419,32 @@ while True:
                             qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
                             conn.query(qu)
 
+                            #for x in range(math.ceil(deleteRange[0]/100), inRange):
+                            #    qu = "UPDATE status SET message='" + ",".join(negativeDict[str(x)])+"' WHERE userhash='" +userZero[:-1]+str(-1*x)+"';"
+                            #    conn.query(qu)
+
+                            # changing negative dict
+                            inRangelist = []
+                            for x in negativeDict[str(inRange)]:
+                                if int(x) < possibleValue:
+                                    inRangelist.append(x)
+                            negativeDict[str(inRange)] = inRangelist
+                            for x in range(inRange+1, math.ceil((deleteRange[1]/100))+1):
+                                negativeDict[str(x)] = []
+                            for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
+                                qu = "UPDATE status SET message='" + ",".join(negativeDict[str(x)])+"' WHERE userhash='" +userZero[:-1]+str(-1*x)+"';"
+                                conn.query(qu)
+
+
 
 
                             if memcacheUserZero:
                                 memc.set(userZero,str(possibleValue) , TTL)
-                        for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
-                            qu = "UPDATE status SET message='" + ",".join(negativeDict[str(x)])+"' WHERE userhash='" +userZero[:-1]+str(-1*x)+"';"
-                            conn.query(qu)
+                        else:
+
+                            for x in range(math.ceil(deleteRange[0]/100), math.ceil((deleteRange[1]/100))+1):
+                                qu = "UPDATE status SET message='" + ",".join(negativeDict[str(x)])+"' WHERE userhash='" +userZero[:-1]+str(-1*x)+"';"
+                                conn.query(qu)
 
                     else:
                         deleteRow = int(req['value'])
@@ -427,18 +458,24 @@ while True:
                             qu = "INSERT INTO status (userhash, message, expires) VALUES ('" + userZero[:-1] +str(-1*math.ceil(deleteRow/100)) +"','',-1);"
                             conn.query(qu)
                         else:
-                            negativeDict[str(math.ceil(deleteRow/100))].append(rows[0]['message'].decode('UTF-8'))
+                            negativeDict[str(math.ceil(deleteRow/100))].append((rows[0]['message'].decode('UTF-8')).strip())
                         negativeDict[str(math.ceil(deleteRow/100))].append(str(deleteRow))
+                        tempList = (",".join(negativeDict[str(math.ceil(deleteRow/100))])).split(',')
+                        tempList = list(set(tempList))
+                        negativeDict[str(math.ceil(deleteRow/100))] = tempList
                         qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(deleteRow) +"';"
                         conn.query(qu)
 
                         if tweetnum==deleteRow:
                             inRange = math.ceil(tweetnum/100)
-                            tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                            tempList = negativeDict[str(inRange)]
+                            '''
                             while(len(tempList)==100):
                                 inRange-=1
                                 #i#f str(inRange)
                                 tempList = (",".join(negativeDict[str(inRange)])).split(',')
+
+                            '''
                             possibleValue = inRange*100
                             for x in range(inRange*100, (inRange-1)*100, -1):
                                 if str(x) not in tempList and x < tweetnum:
@@ -452,6 +489,12 @@ while True:
 
                             if memcacheUserZero:
                                 memc.set(userZero,str(possibleValue) , TTL)
+
+                            inRangelist = []
+                            for x in negativeDict[str(inRange)]:
+                                if int(x) < possibleValue:
+                                    inRangelist.append(x)
+                            negativeDict[str(inRange)] = inRangelist
 
 
                         qu = "UPDATE status SET message='" +",".join(negativeDict[str(math.ceil(deleteRow/100))]) +"' WHERE userhash='" +userZero[:-1] +str(-1*math.ceil(deleteRow/100))+"';"
@@ -494,9 +537,13 @@ while True:
                     else:
                         print("query from memc")
                     tweets = int(memcacheUserZero.decode('UTF-8'))
+                    if tweets < 0:
+                        c.sendall(setMessage(json.dumps({'code':1,'response':'Update Failed'})).encode('UTF-8'))
+                        break
                     qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"','" +str(newTTL)+"');"
                     conn.query(qu)
                     setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
+                    memc.set(req['name']+"#"+str(tweets+1), req['value'])
                     c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                     memc.set(userZero, tweets+1, newTTL)
                     print(datetime.datetime.now())
@@ -530,6 +577,7 @@ while True:
                             num_str = rows[0]['message']
                         messAge = num_str.decode("UTF-8")
                         responseString += userHash + "---->" + messAge +"\n"
+                print(timeList)
                 if responseString!="":
                     c.sendall(setMessage(json.dumps({'code':1,'response':responseString})).encode('UTF-8'))
                 else:
@@ -568,7 +616,8 @@ while True:
             print(str(e))
             traceback.print_exc()
         finally:
-            memc.close()
+            if 'memc' in locals():
+                memc.close()
             c.close()
             exit(0)
 
