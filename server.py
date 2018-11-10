@@ -224,6 +224,43 @@ while True:
                 tweets = int(num_str.decode('UTF-8'))
                 retstr = ""
 
+                # if(debug):
+                #     print(tweets)
+                #     print(int(req['num']))
+                #
+                # user_postno = []
+                # if 'post_nos' in req.keys():
+                #     for i in req['post_nos']:
+                #         user_postno.append(req['name']+'#'+str(i))
+                # else:
+                #     requested_numposts = int(req['num'])
+                #
+                #     while tweets >= 1 and requested_numposts >= 1:
+                #         user_postno.append(req['name']+'#'+str(tweets))
+                #         tweets -=1
+                #         requested_numposts -=1
+                #
+                # #check it brotha
+                # user_posts = memc.get_many(user_postno)
+                #
+                #         #TODO if the search user doesn't exist in the database
+                #
+                # print('Missed posts ->' +str(missed_posts))
+                # if len(missed_posts)>0:
+                #     db_req_keys = "'"+str(missed_posts[0])+"'"
+                #     for i in range(1,len(missed_posts)):
+                #         db_req_keys += ","+"'"+str(missed_posts[i])+"'"
+                #     db_req_keys = "("+db_req_keys+")"
+                #     conn.query("SELECT * FROM status WHERE userhash in " +db_req_keys +"")
+                #     rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                #     temp_keyvalue = {}
+                #     for row in rows:
+                #         print(row)
+                #         #TODO: check for xpiry
+                #         temp_keyvalue[row['userhash']] = row['message']
+                #         user_posts[row['userhash']] = row['message']
+                #     memc.set_many(temp_keyvalue)
+
                 if(debug):
                     print(tweets)
                     print(int(req['num']))
@@ -233,75 +270,38 @@ while True:
                     for i in req['post_nos']:
                         user_postno.append(req['name']+'#'+str(i))
                 else:
+
                     requested_numposts = int(req['num'])
 
-                    while tweets >= 1 and requested_numposts >= 1:
-                        user_postno.append(req['name']+'#'+str(tweets))
-                        tweets -=1
-                        requested_numposts -=1
-
-                #check it brotha
-                user_posts = memc.get_many(user_postno)
-
-                        #TODO if the search user doesn't exist in the database
-
-                print('Missed posts ->' +str(missed_posts))
-                if len(missed_posts)>0:
-                    db_req_keys = "'"+str(missed_posts[0])+"'"
-                    for i in range(1,len(missed_posts)):
-                        db_req_keys += ","+"'"+str(missed_posts[i])+"'"
-                    db_req_keys = "("+db_req_keys+")"
-                    conn.query("SELECT * FROM status WHERE userhash in " +db_req_keys +"")
-                    rows = conn.store_result().fetch_row(how=1,maxrows=0)
-                    temp_keyvalue = {}
-                    for row in rows:
-                        print(row)
-                        #TODO: check for xpiry
-                        temp_keyvalue[row['userhash']] = row['message']
-                        user_posts[row['userhash']] = row['message']
-                    memc.set_many(temp_keyvalue)
-
-                    if(debug):
-                        print(tweets)
-                        print(int(req['num']))
-
-                    user_postno = []
-                    if 'post_nos' in req.keys():
-                        for i in req['post_nos']:
-                            user_postno.append(req['name']+'#'+str(i))
-                    else:
-
-                        requested_numposts = int(req['num'])
-
-                        while tweets > 0 and requested_numposts > 0:
-                            del_list = []
-                            deleted = req['name']+'#-'+ (int((tweets-1)/100)+1)
-                            del_postnos = memc.get(deleted)
-                            if not del_postnos:
-                                qu = "SELECT userhash FROM status WHERE userhash='" + deleted +"'"
-                                conn.query(qu)
-                                rows = conn.store_result()
-                                rows = rows.fetch_row(how=1,maxrows=0)
-                                if len(rows)==0:
-                                    ## No rows for that range is deleted
-                                    del_postnos=""
-                                    pass
-                                else:
-                                    del_postnos = rows[0]
-                            del_postnos = del_postnos.split(',')
-                            for i in del_postnos:
-                                try:
-                                    del_list.append(int(i))
-                                except:
-                                    continue
+                    while tweets > 0 and requested_numposts > 0:
+                        del_list = []
+                        deleted = req['name']+'#-'+ (int((tweets-1)/100)+1)
+                        del_postnos = memc.get(deleted)
+                        if not del_postnos:
+                            qu = "SELECT userhash FROM status WHERE userhash='" + deleted +"'"
+                            conn.query(qu)
+                            rows = conn.store_result()
+                            rows = rows.fetch_row(how=1,maxrows=0)
+                            if len(rows)==0:
+                                ## No rows for that range is deleted
+                                del_postnos=""
+                                pass
+                            else:
+                                del_postnos = rows[0]
+                        del_postnos = del_postnos.split(',')
+                        for i in del_postnos:
+                            try:
+                                del_list.append(int(i))
+                            except:
+                                continue
 
 
-                            while tweets >= 1 and requested_numposts >= 1:
-                                user_postno.append(req['name']+'#'+str(tweets))
-                                tweets -=1
-                                requested_numposts -=1
-                                if tweets%100 ==0:
-                                    break
+                        while tweets >= 1 and requested_numposts >= 1:
+                            user_postno.append(req['name']+'#'+str(tweets))
+                            tweets -=1
+                            requested_numposts -=1
+                            if tweets%100 ==0:
+                                break
 
                     #check it brotha
                     user_posts = memc.get_many(user_postno)
