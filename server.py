@@ -31,10 +31,54 @@ def getMessage(s):
 
 def createDatabaseConn():
     conn = _mysql.connect (host = "localhost",
-                            user = "user",
-                            passwd = "password",
+                            user = "tenzin",
+                            passwd = "tenzin",
                             db = "cs632")
     return conn
+
+def createDatabaseConn2():
+    conn2 = _mysql.connect (host = "localhost",
+                            user = "tenzin",
+                            passwd = "tenzin",
+                            db = "cs632")
+    return conn2
+
+#userLock = {}
+#username is the key
+#the function will return false if currently resource is locked
+#so place it in while loop
+#input conn2
+def  addMemcache(username, conn, memc):
+    #userLock[username] = "free"
+    while not memc.add(username, free,999999):
+        pass
+    qu = "SELECT * FROM lockingDict WHERE userhash='" +username+ "';"
+    conn.query(qu)
+    rows = conn.store_result()
+    rows = rows.fetch_row(how=1, maxrows=0)
+    if(len(rows)==0):
+        qu = "INSERT INTO lockingDict (userhash, lock) VALUES ('" +username+"', lock);"
+        conn.query(qu)
+    else:
+        lockStatus = rows[0]['lock']
+        if(lockStatus==lock):
+            return False
+        qu = "UPDATE lockingDict SET lock='lock' WHERE userhash='" +username+ "';"
+        conn.query(qu)
+    return True
+    #return conn
+
+def delMemcache(username, conn, memc):
+    memc.delete(username)
+    qu = "UPDATE lockingDict SET lock='free' WHERE userhash='" +username+ "';"
+    conn.query(qu)
+
+def setLatest(memcLatest, message):
+    if not (memcLatest.get("Latest")):
+        memcLatest.add("Latest", message, 20)
+    else:
+        memcLatest.append("Latest", message, 20)
+
 
 #<<<<<<< HEAD
 
@@ -46,6 +90,7 @@ def createDatabaseConn():
 #check it brotha line 134
 # Don't forget to run 'memcached' before running this next line:
 memc = base.Client(('127.0.0.1',11211));
+#memcLatest = base.Client(('127.0.0.1', 11219))
 '''
 memc = HashClient(
     ('localhost', 11211),
@@ -55,6 +100,7 @@ memc = HashClient(
 
 
 s = socket.socket()
+#memcLatest.add("Latest", "", 20)
 s.bind(('', int(sys.argv[1])))
 s.listen(5)
 
@@ -66,6 +112,7 @@ while True:
         s.close()
         try:
             conn = createDatabaseConn()
+            conn2 = createDatabaseConn2()
             req = getMessage(c)
             print(req)
             req = json.loads(req)
@@ -99,7 +146,7 @@ while True:
                 # req = json.loads(req)
 
             if req['query']=='searchUser':
-                print("art thou in search")
+                #print("art thou in search")
                 req_value = req['name'] + "#0"
                 num_str = (memc.get(req_value))
                 if not num_str:
@@ -130,6 +177,7 @@ while True:
                         user_postno.append(req['name']+'#'+str(i))
                 else:
                     requested_numposts = int(req['num'])
+
                     while tweets >= 1 and requested_numposts >= 1:
                         user_postno.append(req['name']+'#'+str(tweets))
                         tweets -=1
@@ -150,7 +198,7 @@ while True:
                     for i in range(1,len(missed_posts)):
                         db_req_keys += ","+"'"+str(missed_posts[i])+"'"
                     db_req_keys = "("+db_req_keys+")"
-                    conn.query("SELECT userhash,message FROM status WHERE userhash in " +db_req_keys +"")
+                    conn.query("SELECT * FROM status WHERE userhash in " +db_req_keys +"")
                     rows = conn.store_result().fetch_row(how=1,maxrows=0)
                     temp_keyvalue = {}
                     for row in rows:
@@ -188,6 +236,7 @@ while True:
                 print("tweets: " + str(tweets))
                 qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
                 conn.query(qu)
+                memc
                 c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                 memc.set(req_value, tweets+1, TTL)
                 qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
@@ -267,9 +316,12 @@ while True:
                             #if str(inRange)
                             tempList = (",".join(negativeDict[str(inRange)])).split(',')
                         possibleValue = inRange*100
+                        print(tempList)
                         for x in range(inRange*100, (inRange-1)*100, -1):
-                            if x not in tempList:
+                            #check if possible value in range
+                            if str(x) not in tempList and x < tweetnum:
                                 possibleValue=x
+                                break
 
                         qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
                         conn.query(qu)
@@ -302,14 +354,18 @@ while True:
                     if tweetnum==deleteRow:
                         inRange = math.ceil(tweetnum/100)
                         tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                        '''
                         while(len(tempList)==100):
                             inRange-=1
-                            i#f str(inRange)
+                            #i#f str(inRange)
                             tempList = (",".join(negativeDict[str(inRange)])).split(',')
+                        '''
                         possibleValue = inRange*100
+                        print(tempList)
                         for x in range(inRange*100, (inRange-1)*100, -1):
-                            if x not in tempList:
+                            if str(x) not in tempList and x < tweetnum:
                                 possibleValue=x
+                                break
 
                         qu = "UPDATE status SET message='" +str(possibleValue)+  "' WHERE userhash='" + userZero+"';"
                         conn.query(qu)
