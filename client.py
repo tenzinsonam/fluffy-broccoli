@@ -71,7 +71,8 @@ while True:
             raise SystemExit
         else:
             print('Something went wrong')
-    else:setLatest(memc, req['name']+"#"+str(tweets+1)+":"+(datetime().datetime().now()).strftime("%Y-%m-%d %H:%M:%S"))
+    else:
+
         print('Something went wrong')
         print(jrec)
 
@@ -214,7 +215,17 @@ while True:
             print(jrec['response'])
         #print(rec)
 
-
+    elif que[0]=="getlatest":
+        data = {'query':'getlatest'}
+        json_string = json.dumps(data)
+        #print(json_string)
+        s.sendall(setMessage((json_string).encode('UTF-8')))
+        rec = getMessage(s)
+        #print(rec)
+        jrec = json.loads(rec)
+        if jrec['code']==1:
+            print(jrec['response'])
+        #print(rec)
 
 
     elif que[0]=='exit':

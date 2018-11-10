@@ -74,11 +74,11 @@ def delMemcache(username, conn, memc):
     qu = "UPDATE lockingDict SET lock='free' WHERE userhash='" +username+ "';"
     conn.query(qu)
 
-def setLatest(memcLatest, message):
+def setLatest(memcLatest, message, timeString):
     if not (memcLatest.get("Latest")):
-        memcLatest.add("Latest", message, 20)
+        memcLatest.add("latest#"+timeString, message, 20)
     else:
-        memcLatest.append("Latest", message, 20)
+        memcLatest.append("latest#"+timeString, "^^^^"+message, 20)
 
 
 #<<<<<<< HEAD
@@ -87,7 +87,7 @@ def getmemc():
     return base.Client(('127.0.0.1',11211));
 
 def attemptLock(conn,memc,username):
-    response,cas = memc.gets('#status:'+username+':1') # response denotes if the lock exists
+    response = memc.get('#status:'+username+':1') # response denotes if the lock exists
     if response is None:
         print('Lock not found in memcached')
         ar = conn.query('update locks set status=1 where user="'+str(username)+'" and status=0;')
@@ -114,7 +114,7 @@ def attemptLock(conn,memc,username):
     '''
 
 def releaseLock(conn,memc,username):
-    response,cas = memc.gets('#status:'+username+':1')
+    response = memc.get('#status:'+username+':1')
     if response is None:
         ## Lock entry got evicted from Memcached
         pass
@@ -295,6 +295,7 @@ while True:
                     print("tweets: " + str(tweets))
                     qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
                     conn.query(qu)
+                    setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
                     c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                     memc.set(req_value, tweets+1, TTL)
                     qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
@@ -479,7 +480,7 @@ while True:
                     #deltaParam = "=".join()
                     deltaParam =[int(req['time'][2]),int(req['time'][1]),int(req['time'][0]),0]
                     print(deltaParam)
-                    newTTL = (timenow + datetime.timedelta(hours=deltaParam[0], minutes=deltaParam[1], seconds=deltaParam[2])).strftime("%Y-%m-%d %H:%M:%S")
+                    newTTL = (timenow + datetime.timedelta(hours=deltaParam[0], minutes=deltaParam[1], seconds=deltaParam[2])).strftime("%Y-%m-%d-%H:%M:%S")
                     memcacheUserZero = memc.get(userZero)
                     if not memcacheUserZero:
                         print("query from db")
@@ -495,7 +496,7 @@ while True:
                     tweets = int(memcacheUserZero.decode('UTF-8'))
                     qu = "INSERT INTO status (userhash,message,expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"','" +str(newTTL)+"');"
                     conn.query(qu)
-    setLatest(memc, req['name']+"#"+str(tweets+1)+":"+(datetime().datetime().now()).strftime("%Y-%m-%d %H:%M:%S"))
+                    setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
                     c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
                     memc.set(userZero, tweets+1, newTTL)
                     print(datetime.datetime.now())
@@ -507,6 +508,57 @@ while True:
                     print(sys.exc_info()[0])
                 finally:
                     releaseLock(conn,memc,req['name'])
+
+                    #TODO changes in latestString append mechanism
+            if req['query']=="getlatest":
+                timeNow = datetime.datetime.now()
+                timeList = []
+                for x in range(21):
+                    timeCheck = (timeNow - datetime.timedelta(seconds=x)).strftime("%Y-%m-%d_%H:%M:%S")
+                    userValue = memc.get("latest#"+str(timeCheck))
+                    if userValue:
+                        timeList.append(userValue.decode("UTF-8"))
+                responseString=""
+                for x in timeList:
+                    x = x.split("^^^^")
+                    for userHash in x:
+                        num_str = (memc.get(userHash))
+                        if not num_str:
+                            conn.query("SELECT * FROM status WHERE userhash='" + userHash +"'")
+                            rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                            memc.set(userHash, (rows[0]['message']).decode('UTF-8'), TTL)
+                            num_str = rows[0]['message']
+                        messAge = num_str.decode("UTF-8")
+                        responseString += userHash + "---->" + messAge +"\n"
+                if responseString!="":
+                    c.sendall(setMessage(json.dumps({'code':1,'response':responseString})).encode('UTF-8'))
+                else:
+                    c.sendall(setMessage(json.dumps({'code':1,'response':'No latest messages present'})).encode('UTF-8'))
+
+                '''
+                latestString = memc.get("Latest")
+                if not latestString:
+                    c.sendall(setMessage(json.dumps({'code':1,'response':'No latest messages present'})).encode('UTF-8'))
+                else:
+                    latestString = latestString.decode('UTF-8')
+                    latestString = latestString.split("^^^^")
+                    responseString=""
+                    if len(latestString) >= 20:
+                        itemsAppended=0
+                        for x in reversed(latestString):
+                            if itemsAppended==20:
+                                break
+                            x = x.split(":")
+                            #if()
+                            responseString+= x[0] + "---->" +x[1] +"\n"
+                            itemsAppended+=1
+                    elif len(latestString) < 20:
+                        for x in reversed(latestString):
+                            x = x.split(":")
+                            #if()
+                            responseString+= x[0] + "---->" +x[1] +"\n"
+
+                '''
 
 
 
