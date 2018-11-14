@@ -1,53 +1,31 @@
-# fluffy-broccoli
 
-create table named filmorder with columns film_id,title, rental_rate
+Procedure
 
-#TODO
-1. Add support for command, 
-		updatetill <time in minutes>
-	The post will be valid till that time, 
+1. Run server using command, 'python3 server.py <portno>'
+2. Run client using command, 'python3 client.py <same_portno_as_in_above_command>
+3. If you are a new user, press 'Y', then enter.
+4. If you are already existing user, type your username
+5. After you are logged in you can use any of the following commands 
+    
+    5.1 search <username> <#ofPosts>
+    5.2 update <enter>
+           <Your Post>
+    5.3 deletme
+    5.4 getlatest
+    5.5 deletei <postno>
+    5.6 deletei <starting_post_num> <ending_post_no>
+    5.7 exit
 
-	Add another column "expires" in the database table status
-	This stores the time till when the entry would expire
-	Fetch the requested entry, if it is already expired (NOW()>expires)
-	then delete those entries and return empty corresponding to those entries
+6. The implications of above commands are given below
 
-2. Add support for deletei <my_postno>
-	Also for delete_range <starting postno> <ending postno>
-	We would be using Smart Delete Strategy, according to which
-	dhruvkmr#0 -> Post_no of the last post (as before)
-	dhruvkmr#-1 -> The post_nos of deleted posts numbered from 1-100
-	dhruvkmr#-2 -> Post_nos of deleted posts numbered from 101-200
+•Search: This allows the user to search for any registered username and also allows him to show the last n (specified as an argument) commentsmade by him.  But for this to function, it is necessary to priorly knowthe username of the person to be searched for.
 
-	and so on
+•Update:  This enable the user to write a new comment which can beassociated with him.  This comment posted by this query will not haveany expiry time and thus will be present permanetly in the databaseuntill deleted explicitly by the user by calling some other query
 
-	If I need to print last 233 posts for user with dhruvkmr#0=455
-	I'll check dhruvkmr#-5 to get deleted postnos from 401-500
-	Then I'll check dhruvkmr#-4 to get deleted postnos from 301-400
-	I'll also check dhruvkmr#-3 to get deletd postnos from 201-300
-	And if the no. of remaining posts from 201-455 is <233
-	Then I'll also need to check delete posts from 101-200, using the 
-	value of dhruvkmr#-2
+•Deleteme: This query allows the user to delete its entire footprint fromthe  database  along  with  any  data  relevant  to  him  in  the  memcache.Some  restraint  is  required  while  using  this  command  as  there  is  nogoing back after the deed is done.  (as there is no secondary alerts afterissuing the command to warn the user)
 
-	Note, separate the values of dhruvkmr#-1 (etc)  by <space> or comma
+•DeleteI:  This  enables  the  user  to  delte  any  comment  which  he/shemay feel are not relevant to him/her anymore and provides a wide arryof functionality.  It allows the user to handpick comments one by oneor the comments which lie in a particular range can be deleted.  Againthere  is  no  coming  back  once  the  command  has  been  issued  as  thecomments will be deleted both from the cache and the database
 
-	Upon deletion of a post, if it's postno == dhruvkmr#0's value. Then
-	decrement it, making use of dhruvkmr#-4 or (-5 etc, whatever), to set
-	the value of dhruvkmr#0 to the postno of last undeleted post with maximum
-	post value
-
-3. Add support for '#latest<timestamp>' key whose value would be the username#postid 
-	of the newly added post at time <timestamp>
-	Set the expiration time of this key in memcached to be 20 seconds
-	Clearly if a new post comes at same timestamp, append its' key to the value of #latest<timestamp>
-
-	CLearly there would be atmost 20 #latest<timestamp> entries in the memcache
-
-	If I need to get the latest posts. Get the current timestamp = currtmp
-	search for #latest<currtmp>, #latest<currtmp-1> ... #latest<currtmp-20>
-
-	DO NOT STORE #latest<timestamp> in database.
-	Neither do search for this key in database, if memcahed search fails
-	It's just a temporary storage for latest update, utilizing memcached expiration policy
+.•getLatest:  This query relies heavily upon the memcache and the timeto  live  functionality  provide  by  it.   It  essentially  allows  the  user  toshow all the posts which have been posted to the server in the last 20seconds.  It relies on the fact that while updating a query the TTL forits availability in the cache can be specified.  This essentially allows usto implement this function without any extra costs and worring aboutthe cache getting full of values
 
 

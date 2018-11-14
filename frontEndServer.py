@@ -11,7 +11,7 @@ PORT = 24001
 TTL = 600
 
 # nodes must contain different ips
-nodes = [{'ip':'127.0.0.1','port':12345}]
+nodes = [{'ip':'127.0.0.1','port':12346},{'ip':'10.42.0.1','port':12346}]
 N = len(nodes)
 
 def setMessage(inp):
@@ -57,8 +57,20 @@ while True:
             print(req)
             req = json.loads(req)
 
-            if req['query'] in ['UserExists?']:
-                req_value = req['value']+'#0'
+            if req['query'] == 'updateTill':
+                message = ""
+                req_value = req['name']+'#0'
+                for nd in nodes:
+                    handlingnode = nd
+                    s_handlingnode = socket.socket()
+                    s_handlingnode.connect((handlingnode['ip'],handlingnode['port']))
+                    s_handlingnode.sendall(setMessage((json.dumps(req)).encode('UTF-8')))
+                    message += getMessage(s_handlingnode)+"\n"
+                    s_handlingnode.close()
+                    c.sendall(setMessage(message).encode('UTF-8'))
+                
+            else:
+                req_value = req['name']+'#0'
                 handlingnode = nodes[hash(req_value)%N]
                 s_handlingnode = socket.socket()
                 s_handlingnode.connect((handlingnode['ip'],handlingnode['port']))
@@ -66,41 +78,8 @@ while True:
                 message = getMessage(s_handlingnode)
                 s_handlingnode.close()
                 c.sendall(setMessage(message).encode('UTF-8'))
-            elif req['query'] in ['updateUserinfo']:
-                #TODO
-                print("Handle this")
 
-            elif req['query'] in ['searchUser']:
-                req_value = req['name']+'#0'
-                intended_node_index = hash(req_value)%N
-                handlingnode = nodes[intended_node_index]
-                s_handlingnode = socket.socket()
-                s_handlingnode.connect((handlingnode['ip'],handlingnode['port']))
-
-                s_common = socket.socket()
-                s_common.bind(('',0))
-                s_common.listen(N)
-
-                newquery = {'query':'searchUserAndExpand','name':req['name'],'nodes':nodes,'ini':intended_node_index,'port':s_common.getsockname()[1],'num':req['num']}
-                s_handlingnode.sendall(setMessage(json.dumps(newquery).encode('UTF-8')))
-                s_handlingnode.close()
-
-
-                count = 0 #for number of messages
-                maxcount = -1
-                concatenatedMessage = ""
-                while True:
-                    c_common, addr_common = s_common.accept()
-                    response = getMessage(c_common)
-                    if 'queryResponse' in response.keys() and response['queryResponse']=='searchUserAndExpand':
-                       maxcount = response['totalNumResponses']
-                    concatenatedMessage += response['message']
-                    count+=['numResponse']
-                    if maxcount==count:
-                        break;
-                s_common.close()
-                c.sendall(setMessage(concatenatedMessage))
-        except Exception as e:
+        except:
             print(str(e))
             traceback.print_exc()
         finally:
