@@ -57,7 +57,7 @@ while True:
             print(req)
             req = json.loads(req)
 
-            if req['query'] == 'updateTill':
+            if req['query'] == 'getlatest':
                 message = ""
                 req_value = req['name']+'#0'
                 for nd in nodes:
