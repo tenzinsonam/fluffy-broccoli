@@ -2,7 +2,7 @@
 --
 -- Host: localhost    Database: cs632
 -- ------------------------------------------------------
--- Server version	5.7.24-0ubuntu0.16.04.1
+-- Server version	5.7.24-0ubuntu0.18.04.1
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -41,6 +41,30 @@ INSERT INTO `filmorder` VALUES (1234,'asdvc',3456),(1564,'asdfh',2342),(25345,'f
 UNLOCK TABLES;
 
 --
+-- Table structure for table `locks`
+--
+
+DROP TABLE IF EXISTS `locks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `locks` (
+  `user` varchar(255) NOT NULL,
+  `status` int(11) DEFAULT NULL,
+  PRIMARY KEY (`user`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `locks`
+--
+
+LOCK TABLES `locks` WRITE;
+/*!40000 ALTER TABLE `locks` DISABLE KEYS */;
+INSERT INTO `locks` VALUES ('h',0),('tweety',0);
+/*!40000 ALTER TABLE `locks` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `status`
 --
 
@@ -49,7 +73,8 @@ DROP TABLE IF EXISTS `status`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `status` (
   `userhash` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `message` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL
+  `message` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `expires` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT '-1'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -59,7 +84,7 @@ CREATE TABLE `status` (
 
 LOCK TABLES `status` WRITE;
 /*!40000 ALTER TABLE `status` DISABLE KEYS */;
-INSERT INTO `status` VALUES ('popeye#0','0'),('popyeye#0','0'),('jj#0','0'),('opop#0','0'),('popo#0','0'),('pop#0','0'),('asdf#0','0'),('toto#0','0'),('toto1','asdf'),('toto2','asdfasdfc'),('toto3','agsehg'),('toto#4','afdsasdf'),('toto#5','sdafgasdf'),('azaz#0','4'),('azaz#1','asdfgasdf'),('azaz#2','agges'),('update#0','0'),('azaz#3','gerthh'),('azaz#4','dlfkkjd'),('dasdf#0','0');
+INSERT INTO `status` VALUES ('tweety#0','4','-1'),('tweety#-1','2,3,1','-1'),('tweety#4','lkj','-1'),('h#0','3','-1'),('h#1','ho','-1'),('h#2','x','-1'),('h#3','y','-1');
 /*!40000 ALTER TABLE `status` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -95,4 +120,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-10-31 11:44:50
+-- Dump completed on 2018-11-10 22:10:32

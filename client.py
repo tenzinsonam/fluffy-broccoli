@@ -3,7 +3,13 @@ import datetime
 import sys
 import socket
 
-SERVER_IP = '127.0.0.1'
+import random, string
+
+def randomword(length):
+   letters = string.ascii_lowercase
+   return ''.join(random.choice(letters) for i in range(length))
+
+SERVER_IP = sys.argv[1]
 PORT = 24001
 
 debug = True
@@ -28,7 +34,9 @@ def getMessage(s):
     return res
 
 s = socket.socket()
-s.connect((SERVER_IP, int(sys.argv[1])))
+s.connect((SERVER_IP, int(sys.argv[2])))
+
+# print(s.getpeername())
 
 inp = ""
 
@@ -107,6 +115,9 @@ print('''
     update <enter>
            <Your Post>
     deletme
+    getlatest
+    deletei <postno>
+    deletei <starting_post_num> <ending_post_no>
     exit
     ''')
 
@@ -117,7 +128,7 @@ while True:
     que = que.strip()
     que = que.split(' ')
     s = socket.socket()
-    s.connect((SERVER_IP, int(sys.argv[1])))
+    s.connect((SERVER_IP, int(sys.argv[2])))
 
     if que[0] == "search":
         #print('username to search')
@@ -137,7 +148,7 @@ while True:
         print(rec)
 
     elif que[0] == "update":
-        print(que)
+        # print(que)
         if len(que)!=1:
             print("Wrong # of Arguments !!!\n")
             continue
@@ -149,16 +160,18 @@ while True:
                 break
             pst+='\n'+k
         pst = pst.replace("'","\\'")
-        print(pst)
+        # print(pst)
         data = {'query':'updateUserinfo','name':username,'value':pst}
         json_string = json.dumps(data)
         #print(json_string)
         s.sendall(setMessage((json_string).encode('UTF-8')))
         rec = getMessage(s)
-        print(rec)
+        # print(rec)
         jrec = json.loads(rec)
         if jrec['code']==1:
             print(jrec['response'])
+        else:
+            print('Unable to update the post')
         #print(rec)
 
 
@@ -200,7 +213,7 @@ while True:
                 break
             pst+='\n'+k
         pst = pst.replace("'","\\'")
-        print(pst)
+        # print(pst)
         print("Exist till hours:mins:seconds")
         exst = input()
         #exst = str(exst)
@@ -209,14 +222,14 @@ while True:
         #print(json_string)
         s.sendall(setMessage((json_string).encode('UTF-8')))
         rec = getMessage(s)
-        print(rec)
+        # print(rec)
         jrec = json.loads(rec)
         if jrec['code']==1:
             print(jrec['response'])
         #print(rec)
 
     elif que[0]=="getlatest":
-        data = {'query':'getlatest'}
+        data = {'query':'getlatest','name':randomword(10)}
         json_string = json.dumps(data)
         #print(json_string)
         s.sendall(setMessage((json_string).encode('UTF-8')))
@@ -225,6 +238,8 @@ while True:
         jrec = json.loads(rec)
         if jrec['code']==1:
             print(jrec['response'])
+        else:
+            print("Get status failed")
         #print(rec)
 
 

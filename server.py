@@ -15,6 +15,12 @@ debug = True
 PORT = 24002
 TTL = 600
 
+def d(stri):
+    if(isinstance(stri,str)):
+        return stri
+    else:
+        return stri.decode('UTF-8')
+
 def setMessage(inp):
     str1 = str(len(inp))
     while(len(str1)<10):
@@ -152,6 +158,7 @@ while True:
 
     c, addr = s.accept()
     if not os.fork():
+        print('Request received')
         s.close()
         try:
             memc = getmemc()
@@ -293,7 +300,7 @@ while True:
                                 rows = rows.fetch_row(how=1,maxrows=0)
                                 if len(rows)==0:
                                     ## No rows for that range is deleted
-                                    del_postnos=""
+                                    del_postnos="".encode('UTF-8')
                                     pass
                                 else:
                                     del_postnos = rows[0]['userhash']
@@ -313,39 +320,48 @@ while True:
                                 if tweets%100 ==0:
                                     break
 
-                        #check it brotha
-                        user_posts = memc.get_many(user_postno)
+                    #check it brotha
+                    user_posts = memc.get_many(user_postno)
 
-                        print(user_posts)
-                        missed_posts = []
-                        for key in user_postno:
-                            if key not in user_posts.keys():
-                                missed_posts.append(key)
+                    print(user_posts)
+                    missed_posts = []
+                    for key in user_postno:
+                        if key not in user_posts.keys():
+                            missed_posts.append(key)
 
-                        print('Missed posts ->' +str(missed_posts))
-                        if len(missed_posts)>0:
-                            db_req_keys = "'"+str(missed_posts[0])+"'"
-                            for i in range(1,len(missed_posts)):
-                                db_req_keys += ","+"'"+str(missed_posts[i])+"'"
-                            db_req_keys = "("+db_req_keys+")"
-                            conn.query("SELECT userhash,message FROM status WHERE userhash in " +db_req_keys +";")
-                            rows = conn.store_result().fetch_row(how=1,maxrows=0)
-                            temp_keyvalue = {}
-                            for row in rows:
-                                print(row)
-                                #TODO: check for xpiry
-                                temp_keyvalue[row['userhash']] = row['message']
-                                user_posts[row['userhash']] = row['message']
-                            memc.set_many(temp_keyvalue)
+                    print('Missed posts ->' +str(missed_posts))
+                    if len(missed_posts)>0:
+                        db_req_keys = "'"+str(missed_posts[0])+"'"
+                        for i in range(1,len(missed_posts)):
+                            db_req_keys += ","+"'"+str(missed_posts[i])+"'"
+                        db_req_keys = "("+db_req_keys+")"
+                        conn.query("SELECT userhash,message FROM status WHERE userhash in " +db_req_keys +";")
+                        rows = conn.store_result().fetch_row(how=1,maxrows=0)
+                        temp_keyvalue = {}
+                        for row in rows:
+                            print(row)
+                            #TODO: check for xpiry
+                            temp_keyvalue[row['userhash']] = row['message']
+                            user_posts[row['userhash']] = row['message']
+                        memc.set_many(temp_keyvalue)
 
 
-                        retstr = ""
-                        for key,value in user_posts.items():
-                            retstr += str(key) + " --> " + str(value.decode('UTF-8'))+"\n"
+                    retstr = ""
+                    count=0
+                    for key,value in user_posts.items():
+                        retstr += d(key) + " --> " + str(value.decode('UTF-8'))+"\n"
+                        count+=1
+                    print(retstr)
+                    if(debug):
                         print(retstr)
-                        if(debug):
-                            print(retstr)
+                    if 'to' not in req.keys():
                         c.sendall(setMessage((retstr).encode('UTF-8')))
+                    else:
+                        s_handlingnode = socket.socket()
+                        s_handlingnode.connect((req['to'],req['port']))
+                        s_handlingnode.sendall(setMessage(json.dumps({"numResponse":count,'message':retstr}).encode('UTF-8')))
+                        # {'query':'searchUser','post_nos':tasks[i],'name':req['name'],'port':req['port'],'num':req['num'],'to':c.getpeername()[0]}
+                        s_handlingnode.close()
 
                 except:
                     print(traceback.format_exc())
@@ -356,6 +372,52 @@ while True:
 
 
             if req['query']=='updateUserinfo':
+                while not attemptLock(conn,memc,req['name']):
+                    time.sleep(0.001)
+
+                try:
+                    tweets=0
+                    if 'postHashvalue' not in req.keys():
+                        print('update')
+                        req_value = req['name'] + "#0"
+                        print(req_value)
+                        popularfilms = memc.get(req_value)
+                        if not popularfilms:
+                            print("query from db")
+                            qu = "SELECT * FROM status WHERE userhash='" + req_value +"'"
+                            conn.query(qu)
+                            rows = conn.store_result()
+                            rows = rows.fetch_row(how=1,maxrows=0)
+                            print(rows)
+                            memc.set(req_value, (rows[0]['message']).decode('UTF-8'), TTL)
+                            popularfilms = rows[0]['message']
+                            #memc.set(req_value,'0',TTL)
+                        else:
+                            print("query from memc")
+                        tweets = int((popularfilms).decode('UTF-8'))
+                        if tweets < 0:
+                            c.sendall(setMessage(json.dumps({'code':1,'response':'Update Failed'})).encode('UTF-8'))
+                            break
+                        print("tweets: " + str(tweets))
+                    else:
+                        tweets = int(req['postHashvalue'])
+                    qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
+                    conn.query(qu)
+                    memc.set(req['name']+"#"+str(tweets+1), req['value'])
+                    setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
+                    c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
+                    memc.set(req_value, tweets+1, TTL)
+                    qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
+                    conn.query(qu)
+
+                except:
+                    #if e != "":
+                    print(traceback.format_exc())
+                    print(sys.exc_info()[0])
+                finally:
+                    releaseLock(conn,memc,req['name'])
+
+            if req['query']=='updateUserinfoAndExpand':
                 while not attemptLock(conn,memc,req['name']):
                     time.sleep(0.001)
 
@@ -377,18 +439,30 @@ while True:
                     else:
                         print("query from memc")
                     tweets = int((popularfilms).decode('UTF-8'))
+
                     if tweets < 0:
                         c.sendall(setMessage(json.dumps({'code':1,'response':'Update Failed'})).encode('UTF-8'))
                         break
+
                     print("tweets: " + str(tweets))
-                    qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
-                    conn.query(qu)
-                    memc.set(req['name']+"#"+str(tweets+1), req['value'])
-                    setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
-                    c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
-                    memc.set(req_value, tweets+1, TTL)
-                    qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
-                    conn.query(qu)
+
+                    if str(req['ini']) == str(hash(req['name']+'#'+str(tweets+1))%N):
+                        qu = "INSERT INTO status (userhash,message, expires) VALUES ('" + req['name']+"#"+str(tweets+1) +"','"+req['value']+"',-1)"
+                        conn.query(qu)
+                        memc.set(req['name']+"#"+str(tweets+1), req['value'])
+                        setLatest(memc, req['name']+"#"+str(tweets+1),(datetime.datetime.now()).strftime("%Y-%m-%d_%H:%M:%S"))
+                        c.sendall(setMessage(json.dumps({'code':1,'response':'Status updated'})).encode('UTF-8'))
+                        memc.set(req_value, tweets+1, TTL)
+                        qu = "UPDATE status SET message='" +str(tweets+1) +"' WHERE userhash='"+req_value +"';"
+                        conn.query(qu)
+                    else:
+                        i = hash(req['name']+'#'+str(tweets+1))%N
+                        nodes = req['nodes']
+                        s_handlingnode = socket.socket()
+                        s_handlingnode.connect((nodes[i]['ip'],nodes[i]['port']))
+                        s_handlingnode.sendall(setMessage(json.dumps({'query':'updateUserinfo','postHash':req['name']+'#'+str(tweets+1),'name':req['name'],'value':req['value']}).encode('UTF-8')))
+                        # message = getMessage(s_handlingnode)
+                        s_handlingnode.close()
 
                 except:
                     #if e != "":
@@ -396,6 +470,7 @@ while True:
                     print(sys.exc_info()[0])
                 finally:
                     releaseLock(conn,memc,req['name'])
+
 
             if req['query'] =='deleteUser':
                 while not attemptLock(conn,memc,req['name']):
@@ -552,6 +627,7 @@ while True:
                         negativeDict[str(math.ceil(deleteRow/100))] = tempList
                         qu = "DELETE FROM status WHERE userhash='"+userZero[:-1] +str(deleteRow) +"';"
                         conn.query(qu)
+                        memc.delete(userZero[:-1] +str(deleteRow))
 
                         if tweetnum==deleteRow:
                             inRange = math.ceil(tweetnum/100)
@@ -664,7 +740,7 @@ while True:
                             memc.set(userHash, (rows[0]['message']).decode('UTF-8'), TTL)
                             num_str = rows[0]['message']
                         messAge = num_str.decode("UTF-8")
-                        responseString += userHash + "---->" + messAge +"\n"
+                        responseString += d(userHash) + " --> " + messAge +"\n"
                 print(timeList)
                 if responseString!="":
                     c.sendall(setMessage(json.dumps({'code':1,'response':responseString})).encode('UTF-8'))
@@ -709,7 +785,7 @@ while True:
                 if not num_str:
                     if debug:
                         print("query from db")
-                    conn.query("SELECT * FROM status WHERE userhash='" + req_value +"'")
+                    conn.query("SELECT * FROM status WHERE userhash='" + req_value +"';")
                     rows = conn.store_result().fetch_row(how=1,maxrows=0)
 
                     #TODO if the search user doesn't exist in the database
@@ -737,6 +813,7 @@ while True:
 
 
                 if 'post_nos' in req.keys():
+                    ## This is redundant
                     for i in req['post_nos']:
                         user_postno.append(req['name']+'#'+str(i))
                 else:
@@ -748,7 +825,7 @@ while True:
                         deleted = str(req['name'])+'#-'+ str((int((tweets-1)/100)+1))
                         del_postnos = memc.get(deleted)
                         if not del_postnos:
-                            qu = "SELECT userhash FROM status WHERE userhash='" + deleted +"'"
+                            qu = "SELECT * FROM status WHERE userhash='" + deleted +"'"
                             conn.query(qu)
                             rows = conn.store_result()
                             rows = rows.fetch_row(how=1,maxrows=0)
@@ -757,8 +834,8 @@ while True:
                                 del_postnos=""
                                 pass
                             else:
-                                del_postnos = rows[0]
-                        del_postnos = del_postnos.split(',')
+                                del_postnos = rows[0]['message']
+                        del_postnos = (del_postnos.decode('UTF-8')).split(',')
                         for i in del_postnos:
                             try:
                                 del_list.append(int(i))
@@ -767,9 +844,10 @@ while True:
 
 
                         while tweets >= 1 and requested_numposts >= 1:
-                            user_postno.append(req['name']+'#'+str(tweets))
+                            if tweets not in del_list:
+                                user_postno.append(req['name']+'#'+str(tweets))
+                                requested_numposts -=1
                             tweets -=1
-                            requested_numposts -=1
                             if tweets%100 ==0:
                                 break
                 """    requested_numposts = int(req['num'])
@@ -786,19 +864,34 @@ while True:
                 N = len(nodes)
 
                 tasks = {}
+                for upno in user_postno:
+                    nd = hash(req['name']+'#'+str(upno))%N
+                    if nd not in tasks.keys():
+                        tasks[nd]=[upno]
+                    else:
+                        tasks[nd].append(upno)
+
+                # user_postno_ini=[]
                 for i in range(0,N):
                     if i == ini:
                         continue
+                    else:
+                        if len(tasks[i])>0:
+                            s_handlingnode = socket.socket()
+                            s_handlingnode.connect((nodes[i]['ip'],nodes[i]['port']))
+                            s_handlingnode.sendall(setMessage(json.dumps({'query':'searchUser','post_nos':tasks[i],'name':req['name'],'port':req['port'],'num':req['num'],'to':c.getpeername()[0]}).encode('UTF-8')))
+                            # message = getMessage(s_handlingnode)
+                            s_handlingnode.close()
                     # nodes[hash(req_value)%N] = i
-                    if i in tasks.keys():
-                        tasks[i].append()
+                    # if i in tasks.keys():
+                    #     tasks[i].append()
 
                 #check it brotha
-                user_posts = memc.get_many(user_postno)
+                user_posts = memc.get_many(tasks[ini])
 
                 print(user_posts)
                 missed_posts = []
-                for key in user_postno:
+                for key in tasks[ini]:
                     if key not in user_posts.keys():
                         missed_posts.append(key)
 
@@ -820,12 +913,15 @@ while True:
 
 
                 retstr = ""
+                count = 0
                 for key,value in user_posts.items():
                     retstr += str(key) + " --> " + str(value.decode('UTF-8'))+"\n"
+                    count+=1
                 print(retstr)
                 if(debug):
                     print(retstr)
-                c.sendall(setMessage((retstr).encode('UTF-8')))
+                c.sendall(setMessage(json.dumps({'queryResponse':'searchUserAndExpand','message':retstr,'numResponse':count,'totalNumResponses':len(user_postno)}).encode('UTF-8')))
+
 
 
 

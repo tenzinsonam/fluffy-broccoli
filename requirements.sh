@@ -3,11 +3,11 @@ pip install mysql-connector-python
 pip install pymysql
 pip install mysql-connector-python
 
-# For Debian Distribution
-sudo pacman -S mysql-python
-sudo pacman -S mariadb-all
-sudo pacman mariadb
-sudo pacman -S memcached
+# Uncomment For Debian Distribution
+# sudo pacman -S mysql-python
+# sudo pacman -S mariadb-all
+# sudo pacman mariadb
+# sudo pacman -S memcached
 
 # change permission bits for python in /usr/lib
 
